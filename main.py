@@ -1,4 +1,5 @@
 from os import environ
+import os
 environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
 import pygame
 import random
@@ -13,6 +14,7 @@ color_village_highlighted = (179, 149, 105)
 
 color_water = (175, 217, 216)
 
+global sprites
 
 class Cell:
     def __init__(self, col, row, cell_type='water'):
@@ -23,6 +25,26 @@ class Cell:
         self.cube = offset_to_cube(col, row)
         self.x, self.y, self.z = self.cube
 
+class Unit:
+    def __init__(self, cell, hp, speed, sprite='default', melee=0, ranged=0):
+        self.hp = hp
+        self.speed = speed
+        self.sprite = pygame.sprite.Sprite()
+        self.sprite.image = pygame.image.load(f'{sprite}.png')
+        sprites.add(self.sprite)
+        self.sprite.rect = self.sprite.image.get_rect()
+        pixel = offset_to_pixel(cell.coords[0], cell.coords[1], 10)
+        self.sprite.rect.x = pixel[0]
+        self.sprite.rect.y = pixel[1]
+        self.melee = melee
+        self.ranged = ranged
+        self.coords = cell.coords
+
+    def move(self, x, y):
+        pixel = offset_to_pixel(x, y, 10)
+        self.sprite.rect.x = pixel[0]
+        self.sprite.rect.y = pixel[1]
+        self.coords = (x, y)
 
 class Board:
     def __init__(self, width, height, cell_size, indent):
@@ -31,6 +53,8 @@ class Board:
         self.cell_size = cell_size
         self.indent = indent
         self.board = [[Cell(i, j) for j in range(self.width)] for i in range(self.height)]
+        self.units = [Unit(self.board[20][20], 10, 5), Unit(self.board[10][15], 10, 5)]
+        self.selected_unit = None
         self.clicked = ()
         self.generate_board()
         self.generate_village()
@@ -145,6 +169,13 @@ class Board:
 
     def on_click(self, cell_coords):
         self.clicked = cell_coords
+        select = False
+        for i in self.units:
+            if i.coords == cell_coords:
+                self.selected_unit = i
+                select = True
+        if not select and self.selected_unit:
+            self.selected_unit.move(*cell_coords)
 
     def get_click(self, mouse_pos):
         cell = self.get_cell(mouse_pos)
@@ -192,11 +223,11 @@ def distance(a, b):
 
 if __name__ == '__main__':
     pygame.init()
-
+    sprites = pygame.sprite.Group()
     width = 50
     height = 50
     size = 10
-    indent = 50
+    indent = 0
     board = Board(width, height, size, indent)
 
     size = int(width * size * 3 ** 0.5 + indent * 2), int(height * size * 1.5 + indent * 2)
@@ -215,5 +246,6 @@ if __name__ == '__main__':
                 board.get_click(event.pos)
         screen.fill(color_water)
         board.render()
+        sprites.draw(screen)
         pygame.display.flip()
         clock.tick(fps)
