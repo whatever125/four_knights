@@ -1,13 +1,17 @@
+from os import environ
+environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
 import pygame
 import random
 
-color_earth = (35, 159, 62)
-color_earth_clicked = (19, 124, 41)
+color_earth = (61, 152, 72)
+color_earth_clicked = (38, 124, 48)
+color_earth_highlighted = (92, 172, 101)
 
-color_village = (111, 85, 31)
-color_village_clicked = (76, 56, 16)
+color_village = (166, 127, 67)
+color_village_clicked = (139, 101, 43)
+color_village_highlighted = (179, 149, 105)
 
-color_water = (30, 141, 210)
+color_water = (175, 217, 216)
 
 
 class Cell:
@@ -16,7 +20,7 @@ class Cell:
         self.col = col
         self.row = row
         self.coords = (row, col)
-        self.cube = oddr_to_cube(col, row)
+        self.cube = offset_to_cube(col, row)
         self.x, self.y, self.z = self.cube
 
 
@@ -25,7 +29,7 @@ class Board:
         self.width = width
         self.height = height
         self.cell_size = cell_size
-        self.left = self.top = indent
+        self.indent = indent
         self.board = [[Cell(i, j) for j in range(self.width)] for i in range(self.height)]
         self.clicked = ()
         self.generate_board()
@@ -37,7 +41,7 @@ class Board:
         generator[(x, y)] = 2
         for direct in range(6):
             try:
-                y1, x1 = oddr_offset_neighbor(y, x, direct)
+                y1, x1 = offset_neighbor(y, x, direct)
                 generator[(x1, y1)] = 1
             except Exception:
                 pass
@@ -47,7 +51,7 @@ class Board:
             generator[friend] = 2
             for direct in range(6):
                 try:
-                    y1, x1 = oddr_offset_neighbor(friend[1], friend[0], direct)
+                    y1, x1 = offset_neighbor(friend[1], friend[0], direct)
                     if generator[(x1, y1)] == 0 and random.randint(0, 100) < 40:
                         generator[(x1, y1)] = 1
                 except Exception:
@@ -64,7 +68,7 @@ class Board:
     def generate_village(self):
         generator = {(i, j): self.board[i][j].type == 'earth' for i in range(self.height) for j in
                      range(self.width)}
-        for _ in range((self.width * self.height) // 150):
+        for _ in range((self.width * self.height) // 100):
             earth = list(filter(lambda x: generator[x] == 1, generator))
             village = random.choice(earth)
             generator[village] = 2
@@ -75,12 +79,15 @@ class Board:
     def offset_to_pixel(self, col, row):
         x = self.cell_size * 3 ** 0.5 * (col + 0.5 * (row % 2))
         y = self.cell_size * 1.5 * row
-        return (int(x + 3 ** 0.5 * self.cell_size / 2) + self.left, int(y) + self.top), \
-               (int(x + 3 ** 0.5 * self.cell_size) + self.left, int(y + 0.5 * self.cell_size) + self.top), \
-               (int(x + 3 ** 0.5 * self.cell_size) + self.left, int(y + 1.5 * self.cell_size) + self.top), \
-               (int(x + 3 ** 0.5 * self.cell_size / 2) + self.left, int(y + 2 * self.cell_size) + self.top), \
-               (int(x) + self.left, int(y + 1.5 * self.cell_size) + self.top), \
-               (int(x) + self.left, int(y + 0.5 * self.cell_size) + self.top)
+        return (int(x + 3 ** 0.5 * self.cell_size / 2) + self.indent, int(y) + self.indent), \
+               (int(x + 3 ** 0.5 * self.cell_size) + self.indent, int(y + 0.5 * self.cell_size) +
+                self.indent), \
+               (int(x + 3 ** 0.5 * self.cell_size) + self.indent, int(y + 1.5 * self.cell_size) +
+                self.indent), \
+               (int(x + 3 ** 0.5 * self.cell_size / 2) + self.indent, int(y + 2 * self.cell_size) +
+                self.indent), \
+               (int(x) + self.indent, int(y + 1.5 * self.cell_size) + self.indent), \
+               (int(x) + self.indent, int(y + 0.5 * self.cell_size) + self.indent)
 
     def render(self):
         for row in self.board:
@@ -105,6 +112,8 @@ class Board:
 
     def get_cell(self, mouse_pos):
         x, y = mouse_pos
+        x -= self.indent
+        y -= self.indent
         gridHeight = self.cell_size * 1.5
         gridWidth = self.cell_size * 3 ** 0.5
         halfWidth = gridWidth / 2
@@ -144,7 +153,7 @@ class Board:
             self.on_click(cell)
 
 
-oddr_directions = [
+offset_directions = [
     [[+1, 0], [0, -1], [-1, -1],
      [-1, 0], [-1, +1], [0, +1]],
     [[+1, 0], [+1, -1], [0, -1],
@@ -152,19 +161,25 @@ oddr_directions = [
 ]
 
 
-def oddr_offset_neighbor(col, row, direction):
+def offset_to_pixel(col, row, size):
+    x = size * 3 ** 0.5 * (col + 0.5 * (row % 2))
+    y = size * 3/2 * row
+    return int(x), int(y)
+
+
+def offset_neighbor(col, row, direction):
     parity = row % 2
-    dir = oddr_directions[parity][direction]
+    dir = offset_directions[parity][direction]
     return col + dir[0], row + dir[1]
 
 
-def cube_to_oddr(x, y, z):
+def cube_to_offset(x, y, z):
     col = x + (z - (z % 2)) / 2
     row = z
     return col, row
 
 
-def oddr_to_cube(col, row):
+def offset_to_cube(col, row):
     x = col - (row - (row % 2)) / 2
     z = row
     y = -x - z
@@ -178,8 +193,8 @@ def distance(a, b):
 if __name__ == '__main__':
     pygame.init()
 
-    width = 30
-    height = 30
+    width = 50
+    height = 50
     size = 10
     indent = 50
     board = Board(width, height, size, indent)
@@ -188,7 +203,7 @@ if __name__ == '__main__':
     screen = pygame.display.set_mode(size)
     screen.fill(color_water)
 
-    fps = 1
+    fps = 60
     clock = pygame.time.Clock()
 
     running = True
