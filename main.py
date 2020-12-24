@@ -3,6 +3,9 @@ import os
 environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
 import pygame
 import random
+from queue import PriorityQueue
+from dataclasses import dataclass, field
+from typing import Any
 
 color_earth = (61, 152, 72)
 color_earth_clicked = (38, 124, 48)
@@ -15,6 +18,11 @@ color_village_highlighted = (179, 149, 105)
 color_water = (175, 217, 216)
 
 global sprites
+
+@dataclass(order=True)
+class PrioritizedItem:
+    priority: int
+    item: Any=field(compare=False)
 
 class Cell:
     def __init__(self, col, row, cell_type='water'):
@@ -30,7 +38,7 @@ class Unit:
         self.hp = hp
         self.speed = speed
         self.sprite = pygame.sprite.Sprite()
-        self.sprite.image = pygame.image.load(f'{sprite}.png')
+        self.sprite.image = pygame.transform.scale(pygame.image.load(f'{sprite}.png'), (size * 2, size * 2))
         sprites.add(self.sprite)
         self.sprite.rect = self.sprite.image.get_rect()
         pixel = offset_to_pixel(cell.coords[0], cell.coords[1], 10)
@@ -174,14 +182,38 @@ class Board:
             if i.coords == cell_coords:
                 self.selected_unit = i
                 select = True
-        if not select and self.selected_unit:
+        if self.board[cell_coords[1]][cell_coords[0]].type == 'water':
+            self.selected_unit = None
+        elif not select and self.selected_unit and self.find_path(self.selected_unit.coords, cell_coords) <= self.selected_unit.speed:
             self.selected_unit.move(*cell_coords)
+            self.selected_unit = None
+            self.clicked = None
 
     def get_click(self, mouse_pos):
         cell = self.get_cell(mouse_pos)
         x, y = cell
         if 0 <= x < self.height and 0 <= y < self.width:
             self.on_click(cell)
+
+    def find_path(self, start, goal):
+        frontier = PriorityQueue()
+        frontier.put(PrioritizedItem(0, start))
+        came_from = dict()
+        cost_so_far = dict()
+        came_from[start] = None
+        cost_so_far[start] = 0
+        while not frontier.empty():
+            current = frontier.get().item
+            if current == goal:
+                return cost_so_far[current]
+            neighbors = filter(lambda x:self.board[x[1]][x[0]].type != 'water',[offset_neighbor(current[0], current[1], i) for i in range(6)])
+            for next in neighbors:
+                new_cost = cost_so_far[current] + distance(current, next)
+                if next not in cost_so_far or new_cost < cost_so_far[next]:
+                    cost_so_far[next] = new_cost
+                    priority = new_cost + distance(next, goal)
+                    frontier.put(PrioritizedItem(priority, next))
+                    came_from[next] = current
 
 
 offset_directions = [
@@ -218,7 +250,9 @@ def offset_to_cube(col, row):
 
 
 def distance(a, b):
-    return max(abs(a.x - b.x), abs(a.y - b.y), abs(a.z - b.z))
+    return (abs(a[0] - b[0])
+          + abs(a[0] + a[1] - b[0] - b[1])
+          + abs(a[1] - b[1])) / 2
 
 
 if __name__ == '__main__':
@@ -229,14 +263,11 @@ if __name__ == '__main__':
     size = 10
     indent = 0
     board = Board(width, height, size, indent)
-
     size = int(width * size * 3 ** 0.5 + indent * 2), int(height * size * 1.5 + indent * 2)
     screen = pygame.display.set_mode(size)
     screen.fill(color_water)
-
     fps = 60
     clock = pygame.time.Clock()
-
     running = True
     while running:
         for event in pygame.event.get():
