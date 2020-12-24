@@ -1,5 +1,5 @@
 from os import environ
-import os
+
 environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
 import pygame
 import random
@@ -14,7 +14,19 @@ color_village_highlighted = (179, 149, 105)
 
 color_water = (175, 217, 216)
 
-global sprites
+
+class Camera:
+    def __init__(self):
+        self.dx, self.dy = 0, 0
+
+    def apply(self, obj):
+        obj.rect.x += self.dx
+        obj.rect.y += self.dy
+
+    def update(self, target):
+        self.dx = -(target.rect.x + target.rect.w // 2 - width // 2)
+        self.dy = -(target.rect.y + target.rect.h // 2 - height // 2)
+
 
 class Cell:
     def __init__(self, col, row, cell_type='water'):
@@ -25,26 +37,49 @@ class Cell:
         self.cube = offset_to_cube(col, row)
         self.x, self.y, self.z = self.cube
 
+
 class Unit:
     def __init__(self, cell, hp, speed, sprite='default', melee=0, ranged=0):
         self.hp = hp
         self.speed = speed
         self.sprite = pygame.sprite.Sprite()
-        self.sprite.image = pygame.image.load(f'{sprite}.png')
-        sprites.add(self.sprite)
+        self.image = pygame.image.load(f'{sprite}.png')
+        self.sprite.image = pygame.transform.scale(self.image, (int(size * 2), int(size * 2)))
         self.sprite.rect = self.sprite.image.get_rect()
-        pixel = offset_to_pixel(cell.coords[0], cell.coords[1], 10)
+        pixel = offset_to_pixel(cell.coords[0], cell.coords[1])
         self.sprite.rect.x = pixel[0]
         self.sprite.rect.y = pixel[1]
+        sprites.add(self.sprite)
         self.melee = melee
         self.ranged = ranged
         self.coords = cell.coords
 
     def move(self, x, y):
-        pixel = offset_to_pixel(x, y, 10)
-        self.sprite.rect.x = pixel[0]
-        self.sprite.rect.y = pixel[1]
+        pixel = offset_to_pixel(x, y)
+        self.sprite.rect.x = pixel[0] + camera.dx
+        self.sprite.rect.y = pixel[1] + camera.dy
         self.coords = (x, y)
+
+    def upscale(self):
+        sprites.remove(self.sprite)
+        self.sprite.image = pygame.transform.scale(self.image,
+                                                   (int(size * 2), int(size * 2)))
+        self.sprite.rect = self.sprite.image.get_rect()
+        pixel = offset_to_pixel(self.coords[0], self.coords[1])
+        self.sprite.rect.x = pixel[0] + camera.dx
+        self.sprite.rect.y = pixel[1] + camera.dy
+        sprites.add(self.sprite)
+
+    def downscale(self):
+        sprites.remove(self.sprite)
+        self.sprite.image = pygame.transform.scale(self.image,
+                                                   (int(size * 2), int(size * 2)))
+        self.sprite.rect = self.sprite.image.get_rect()
+        pixel = offset_to_pixel(self.coords[0], self.coords[1])
+        self.sprite.rect.x = pixel[0] + camera.dx
+        self.sprite.rect.y = pixel[1] + camera.dy
+        sprites.add(self.sprite)
+
 
 class Board:
     def __init__(self, width, height, cell_size, indent):
@@ -53,7 +88,7 @@ class Board:
         self.cell_size = cell_size
         self.indent = indent
         self.board = [[Cell(i, j) for j in range(self.width)] for i in range(self.height)]
-        self.units = [Unit(self.board[20][20], 10, 5), Unit(self.board[10][15], 10, 5)]
+        self.units = [Unit(self.board[10][10], 10, 5), Unit(self.board[15][15], 10, 5)]
         self.selected_unit = None
         self.clicked = ()
         self.generate_board()
@@ -103,15 +138,18 @@ class Board:
     def offset_to_pixel(self, col, row):
         x = self.cell_size * 3 ** 0.5 * (col + 0.5 * (row % 2))
         y = self.cell_size * 1.5 * row
-        return (int(x + 3 ** 0.5 * self.cell_size / 2) + self.indent, int(y) + self.indent), \
-               (int(x + 3 ** 0.5 * self.cell_size) + self.indent, int(y + 0.5 * self.cell_size) +
-                self.indent), \
-               (int(x + 3 ** 0.5 * self.cell_size) + self.indent, int(y + 1.5 * self.cell_size) +
-                self.indent), \
-               (int(x + 3 ** 0.5 * self.cell_size / 2) + self.indent, int(y + 2 * self.cell_size) +
-                self.indent), \
-               (int(x) + self.indent, int(y + 1.5 * self.cell_size) + self.indent), \
-               (int(x) + self.indent, int(y + 0.5 * self.cell_size) + self.indent)
+        return (int(x + 3 ** 0.5 * self.cell_size / 2) + self.indent + camera.dx,
+                int(y) + self.indent + camera.dy), \
+               (int(x + 3 ** 0.5 * self.cell_size) + self.indent + camera.dx,
+                int(y + 0.5 * self.cell_size) + self.indent + camera.dy), \
+               (int(x + 3 ** 0.5 * self.cell_size) + self.indent + camera.dx,
+                int(y + 1.5 * self.cell_size) + self.indent + camera.dy), \
+               (int(x + 3 ** 0.5 * self.cell_size / 2) + self.indent + camera.dx,
+                int(y + 2 * self.cell_size) + self.indent + camera.dy), \
+               (int(x) + self.indent + camera.dx,
+                int(y + 1.5 * self.cell_size) + self.indent + camera.dy), \
+               (int(x) + self.indent + camera.dx,
+                int(y + 0.5 * self.cell_size) + self.indent + camera.dy)
 
     def render(self):
         for row in self.board:
@@ -137,7 +175,9 @@ class Board:
     def get_cell(self, mouse_pos):
         x, y = mouse_pos
         x -= self.indent
+        x -= camera.dx
         y -= self.indent
+        y -= camera.dy
         gridHeight = self.cell_size * 1.5
         gridWidth = self.cell_size * 3 ** 0.5
         halfWidth = gridWidth / 2
@@ -176,12 +216,16 @@ class Board:
                 select = True
         if not select and self.selected_unit:
             self.selected_unit.move(*cell_coords)
+            self.selected_unit = None
 
     def get_click(self, mouse_pos):
         cell = self.get_cell(mouse_pos)
         x, y = cell
         if 0 <= x < self.height and 0 <= y < self.width:
             self.on_click(cell)
+
+    def update(self):
+        self.cell_size = size
 
 
 offset_directions = [
@@ -192,10 +236,10 @@ offset_directions = [
 ]
 
 
-def offset_to_pixel(col, row, size):
+def offset_to_pixel(col, row):
     x = size * 3 ** 0.5 * (col + 0.5 * (row % 2))
-    y = size * 3/2 * row
-    return int(x), int(y)
+    y = size * 3 / 2 * row
+    return int(x) + indent, int(y) + indent
 
 
 def offset_neighbor(col, row, direction):
@@ -224,18 +268,21 @@ def distance(a, b):
 if __name__ == '__main__':
     pygame.init()
     sprites = pygame.sprite.Group()
-    width = 50
-    height = 50
-    size = 10
-    indent = 0
+    width = 30
+    height = 30
+    size = 15
+    indent = 50
+    delta = 25
     board = Board(width, height, size, indent)
 
-    size = int(width * size * 3 ** 0.5 + indent * 2), int(height * size * 1.5 + indent * 2)
-    screen = pygame.display.set_mode(size)
+    screen_size = int(width * size * 3 ** 0.5 + indent * 2), int(height * size * 1.5 + indent * 2)
+    screen = pygame.display.set_mode(screen_size)
     screen.fill(color_water)
 
     fps = 60
     clock = pygame.time.Clock()
+
+    camera = Camera()
 
     running = True
     while running:
@@ -243,7 +290,47 @@ if __name__ == '__main__':
             if event.type == pygame.QUIT:
                 running = False
             if event.type == pygame.MOUSEBUTTONDOWN:
-                board.get_click(event.pos)
+                if event.button == 1:
+                    board.get_click(event.pos)
+                if event.button == 4:
+                    size = round(size * 1.1)
+                    delta = round(delta * 1.1)
+                    if size > 50:
+                        size = 50
+                    else:
+                        camera.dx = round(camera.dx * 1.1)
+                        camera.dy = round(camera.dy * 1.1)
+                    board.update()
+                    for unit in board.units:
+                        unit.upscale()
+                if event.button == 5:
+                    size = round(size / 1.1)
+                    delta = round(delta / 1.1)
+                    if size < 10:
+                        size = 10
+                    else:
+                        camera.dx = round(camera.dx / 1.1)
+                        camera.dy = round(camera.dy / 1.1)
+                    board.update()
+                    for unit in board.units:
+                        unit.downscale()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_DOWN:
+                    camera.dy -= delta
+                    for unit in board.units:
+                        unit.sprite.rect.y -= delta
+                if event.key == pygame.K_UP:
+                    camera.dy += delta
+                    for unit in board.units:
+                        unit.sprite.rect.y += delta
+                if event.key == pygame.K_LEFT:
+                    camera.dx += delta
+                    for unit in board.units:
+                        unit.sprite.rect.x += delta
+                if event.key == pygame.K_RIGHT:
+                    camera.dx -= delta
+                    for unit in board.units:
+                        unit.sprite.rect.x -= delta
         screen.fill(color_water)
         board.render()
         sprites.draw(screen)
