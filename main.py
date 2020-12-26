@@ -6,6 +6,7 @@ import random
 from queue import PriorityQueue
 from dataclasses import dataclass, field
 from typing import Any
+import random
 
 color_earth = (61, 152, 72)
 color_earth_clicked = (38, 124, 48)
@@ -34,25 +35,64 @@ class Cell:
         self.x, self.y, self.z = self.cube
 
 class Unit:
-    def __init__(self, cell, hp, speed, sprite='default', melee=0, ranged=0):
+    def __init__(self, coords, board, hp=20, speed=6, sprite='default', melee={'damage': 10, 'attacks': 1, 'mod': 0, 'type': 'melee'}, ranged=None):
         self.hp = hp
         self.speed = speed
+        self.defence = 0.5
         self.sprite = pygame.sprite.Sprite()
         self.sprite.image = pygame.transform.scale(pygame.image.load(f'{sprite}.png'), (size * 2, size * 2))
         sprites.add(self.sprite)
         self.sprite.rect = self.sprite.image.get_rect()
-        pixel = offset_to_pixel(cell.coords[0], cell.coords[1], 10)
+        pixel = offset_to_pixel(coords[0], coords[1], 10)
         self.sprite.rect.x = pixel[0]
         self.sprite.rect.y = pixel[1]
         self.melee = melee
         self.ranged = ranged
-        self.coords = cell.coords
+        self.coords = coords
+        self.board = board
 
     def move(self, x, y):
         pixel = offset_to_pixel(x, y, 10)
         self.sprite.rect.x = pixel[0]
         self.sprite.rect.y = pixel[1]
         self.coords = (x, y)
+
+    def die(self):
+        self.board.units = list(filter(lambda x:x != self, self.board.units))
+        sprites.remove(self.sprite)
+
+    def attack(self, attack, enemy):
+        if attack['type'] == 'melee':
+            for i in range(attack['attacks']):
+                if random.random() + attack['mod'] > enemy.defence:
+                    enemy.hp -= attack['damage']
+                    print(self.hp, enemy.hp)
+                    if enemy.hp <= 0:
+                        enemy.die()
+                        return
+            if enemy.melee:
+                for i in range(enemy.melee['attacks']):
+                    if random.random() + enemy.melee['mod'] > self.defence:
+                        self.hp -= enemy.melee['damage']
+                        print(self.hp, enemy.hp)
+                        if self.hp <= 0:
+                            self.die()
+                            return
+        if attack['type'] == 'ranged':
+            for i in range(attack['attacks']):
+                if random.random() + attack['mod'] > enemy.defence:
+                    enemy.hp -= attack['damage']
+                    if enemy.hp <= 0:
+                        enemy.die()
+                        return
+            if enemy.ranged:
+                for i in range(enemy.ranged['attacks']):
+                    if random.random() + enemy.ranged['mod'] > self.defence:
+                        self.hp -= enemy.ranged['damage']
+                        if self.hp <= 0:
+                            self.die()
+                            return
+
 
 class Board:
     def __init__(self, width, height, cell_size, indent):
@@ -61,7 +101,8 @@ class Board:
         self.cell_size = cell_size
         self.indent = indent
         self.board = [[Cell(i, j) for j in range(self.width)] for i in range(self.height)]
-        self.units = [Unit(self.board[20][20], 10, 5), Unit(self.board[10][15], 10, 5)]
+        self.units = [Unit((20, 20), self), Unit((21, 21), self)]
+        r = random.randint(20, 40)
         self.selected_unit = None
         self.clicked = ()
         self.generate_board()
@@ -178,10 +219,18 @@ class Board:
     def on_click(self, cell_coords):
         self.clicked = cell_coords
         select = False
-        for i in self.units:
-            if i.coords == cell_coords:
-                self.selected_unit = i
-                select = True
+        if not self.selected_unit or int(self.find_path(cell_coords, self.selected_unit.coords)) != 1:
+            for i in self.units:
+                if i.coords == cell_coords:
+                    self.selected_unit = i
+                    select = True
+        elif int(self.find_path(cell_coords, self.selected_unit.coords)) == 1:
+            for i in self.units:
+                if i.coords == cell_coords:
+                    self.selected_unit.attack(self.selected_unit.melee, i)
+                    self.selected_unit = None
+                    self.clicked = None
+                    return
         if self.board[cell_coords[1]][cell_coords[0]].type == 'water':
             self.selected_unit = None
         elif not select and self.selected_unit and self.find_path(self.selected_unit.coords, cell_coords) <= self.selected_unit.speed:
