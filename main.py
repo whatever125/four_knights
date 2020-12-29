@@ -23,9 +23,28 @@ class Camera:
         obj.rect.x += self.dx
         obj.rect.y += self.dy
 
-    def update(self, target):
-        self.dx = -(target.rect.x + target.rect.w // 2 - width // 2)
-        self.dy = -(target.rect.y + target.rect.h // 2 - height // 2)
+    def update(self):
+        x, y = pygame.mouse.get_pos()
+        if x <= screen_size[0] * 0.1 and x != 0 and y != 0 and \
+                x != screen_size[0] - 1 and y != screen_size[1] - 1:
+            self.dx += delta
+            for unit in board.units:
+                unit.sprite.rect.x += delta
+        if y <= screen_size[1] * 0.1 and x != 0 and y != 0 and \
+                x != screen_size[0] - 1 and y != screen_size[1] - 1:
+            self.dy += delta
+            for unit in board.units:
+                unit.sprite.rect.y += delta
+        if x >= screen_size[0] * 0.9 and x != 0 and y != 0 and \
+                x != screen_size[0] - 1 and y != screen_size[1] - 1:
+            self.dx -= delta
+            for unit in board.units:
+                unit.sprite.rect.x -= delta
+        if y >= screen_size[1] * 0.9 and x != 0 and y != 0 and \
+                x != screen_size[0] - 1 and y != screen_size[1] - 1:
+            self.dy -= delta
+            for unit in board.units:
+                unit.sprite.rect.y -= delta
 
 
 class Cell:
@@ -55,22 +74,12 @@ class Unit:
         self.coords = cell.coords
 
     def move(self, x, y):
-        pixel = offset_to_pixel(x, y)
-        self.sprite.rect.x = pixel[0] + camera.dx
-        self.sprite.rect.y = pixel[1] + camera.dy
         self.coords = (x, y)
-
-    def upscale(self):
-        sprites.remove(self.sprite)
-        self.sprite.image = pygame.transform.scale(self.image,
-                                                   (int(size * 2), int(size * 2)))
-        self.sprite.rect = self.sprite.image.get_rect()
         pixel = offset_to_pixel(self.coords[0], self.coords[1])
         self.sprite.rect.x = pixel[0] + camera.dx
         self.sprite.rect.y = pixel[1] + camera.dy
-        sprites.add(self.sprite)
 
-    def downscale(self):
+    def update(self):
         sprites.remove(self.sprite)
         self.sprite.image = pygame.transform.scale(self.image,
                                                    (int(size * 2), int(size * 2)))
@@ -270,12 +279,13 @@ if __name__ == '__main__':
     sprites = pygame.sprite.Group()
     width = 30
     height = 30
-    size = 15
+    size = original_size = 15
+    delta = original_delta = 3
     indent = 50
-    delta = 25
     board = Board(width, height, size, indent)
 
-    screen_size = int(width * size * 3 ** 0.5 + indent * 2), int(height * size * 1.5 + indent * 2)
+    screen_size = screen_width, screen_height = round(width * size * 3 ** 0.5 + indent * 2), \
+                                                round(height * size * 1.5 + indent * 2)
     screen = pygame.display.set_mode(screen_size)
     screen.fill(color_water)
 
@@ -293,45 +303,40 @@ if __name__ == '__main__':
                 if event.button == 1:
                     board.get_click(event.pos)
                 if event.button == 4:
-                    size = round(size * 1.1)
-                    delta = round(delta * 1.1)
-                    if size > 50:
-                        size = 50
-                    else:
-                        camera.dx = round(camera.dx * 1.1)
-                        camera.dy = round(camera.dy * 1.1)
-                    board.update()
-                    for unit in board.units:
-                        unit.upscale()
+                    if round(size * 1.1) <= 50:
+                        size = round(size * 1.1)
+                        delta = round(delta * 1.1)
+                        screen_width = round(screen_width * 1.1)
+                        screen_height = round(screen_height * 1.1)
+                        camera.dx = round(camera.dx * 1.1 - screen_size[0] * 0.05)
+                        camera.dy = round(camera.dy * 1.1 - screen_size[1] * 0.05)
+                        board.update()
+                        for unit in board.units:
+                            unit.update()
                 if event.button == 5:
-                    size = round(size / 1.1)
-                    delta = round(delta / 1.1)
-                    if size < 10:
-                        size = 10
-                    else:
-                        camera.dx = round(camera.dx / 1.1)
-                        camera.dy = round(camera.dy / 1.1)
+                    if round(size / 1.1) >= 10:
+                        size = round(size / 1.1)
+                        delta = round(delta / 1.1)
+                        screen_width = round(screen_width / 1.1)
+                        screen_height = round(screen_height / 1.1)
+                        camera.dx = round(camera.dx / 1.1 + screen_size[0] * 0.045)
+                        camera.dy = round(camera.dy / 1.1 + screen_size[1] * 0.045)
+                        board.update()
+                        for unit in board.units:
+                            unit.update()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_z:
+                    camera.dx = 0
+                    camera.dy = 0
+                    size = original_size
+                    delta = original_delta
+                    screen_width = screen_size[0]
+                    screen_height = screen_size[1]
                     board.update()
                     for unit in board.units:
-                        unit.downscale()
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_DOWN:
-                    camera.dy -= delta
-                    for unit in board.units:
-                        unit.sprite.rect.y -= delta
-                if event.key == pygame.K_UP:
-                    camera.dy += delta
-                    for unit in board.units:
-                        unit.sprite.rect.y += delta
-                if event.key == pygame.K_LEFT:
-                    camera.dx += delta
-                    for unit in board.units:
-                        unit.sprite.rect.x += delta
-                if event.key == pygame.K_RIGHT:
-                    camera.dx -= delta
-                    for unit in board.units:
-                        unit.sprite.rect.x -= delta
+                        unit.update()
         screen.fill(color_water)
+        camera.update()
         board.render()
         sprites.draw(screen)
         pygame.display.flip()
