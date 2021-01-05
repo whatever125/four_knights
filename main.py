@@ -1,12 +1,8 @@
-from os import environ
-
-environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
 import pygame
 import random
 from queue import PriorityQueue
 from dataclasses import dataclass, field
 from typing import Any
-import random
 
 color_earth = (61, 152, 72)
 color_earth_clicked = (38, 124, 48)
@@ -22,7 +18,8 @@ color_water = (175, 217, 216)
 @dataclass(order=True)
 class PrioritizedItem:
     priority: int
-    item: Any=field(compare=False)
+    item: Any = field(compare=False)
+
 
 class Camera:
     def __init__(self):
@@ -67,22 +64,23 @@ class Cell:
 
 
 class Unit:
-    def __init__(self, coords, board, hp=20, speed=6, sprite='default', melee={'damage': 10, 'attacks': 1, 'mod': 0, 'type': 'melee'}, ranged=None):
+    def __init__(self, coords, board, hp=20, speed=6, sprite='default',
+                 melee={'damage': 10, 'attacks': 1, 'mod': 0, 'type': 'melee'}, ranged=None):
+        self.coords = coords
+        self.board = board
         self.hp = hp
         self.speed = speed
+        self.melee = melee
+        self.ranged = ranged
         self.defence = 0.5
         self.sprite = pygame.sprite.Sprite()
         self.image = pygame.image.load(f'{sprite}.png')
         self.sprite.image = pygame.transform.scale(self.image, (int(size * 2), int(size * 2)))
         self.sprite.rect = self.sprite.image.get_rect()
-        pixel = offset_to_pixel(cell.coords[0], cell.coords[1])
+        pixel = offset_to_pixel(self.coords[0], self.coords[1])
         self.sprite.rect.x = pixel[0]
         self.sprite.rect.y = pixel[1]
         sprites.add(self.sprite)
-        self.melee = melee
-        self.ranged = ranged
-        self.coords = coords
-        self.board = board
 
     def move(self, x, y):
         self.coords = (x, y)
@@ -91,7 +89,7 @@ class Unit:
         self.sprite.rect.y = pixel[1] + camera.dy
 
     def die(self):
-        self.board.units = list(filter(lambda x:x != self, self.board.units))
+        self.board.units = list(filter(lambda x: x != self, self.board.units))
         sprites.remove(self.sprite)
 
     def attack(self, attack, enemy):
@@ -126,7 +124,6 @@ class Unit:
                             self.die()
                             return
 
-
     def update(self):
         sprites.remove(self.sprite)
         self.sprite.image = pygame.transform.scale(self.image,
@@ -145,7 +142,7 @@ class Board:
         self.cell_size = cell_size
         self.indent = indent
         self.board = [[Cell(i, j) for j in range(self.width)] for i in range(self.height)]
-        self.units = [Unit(self.board[10][10], 10, 5), Unit(self.board[15][15], 10, 5)]
+        self.units = [Unit((20, 20), self), Unit((21, 21), self)]
         self.selected_unit = None
         self.clicked = ()
         self.generate_board()
@@ -267,7 +264,8 @@ class Board:
     def on_click(self, cell_coords):
         self.clicked = cell_coords
         select = False
-        if not self.selected_unit or int(self.find_path(cell_coords, self.selected_unit.coords)) != 1:
+        if not self.selected_unit or int(
+                self.find_path(cell_coords, self.selected_unit.coords)) != 1:
             for i in self.units:
                 if i.coords == cell_coords:
                     self.selected_unit = i
@@ -281,9 +279,11 @@ class Board:
                     return
         if self.board[cell_coords[1]][cell_coords[0]].type == 'water':
             self.selected_unit = None
-        elif not select and self.selected_unit and self.find_path(self.selected_unit.coords, cell_coords) <= self.selected_unit.speed:
+        elif not select and self.selected_unit and \
+                self.find_path(self.selected_unit.coords, cell_coords) <= self.selected_unit.speed:
             self.selected_unit.move(*cell_coords)
             self.selected_unit = None
+            self.clicked = None
 
     def get_click(self, mouse_pos):
         cell = self.get_cell(mouse_pos)
@@ -302,7 +302,8 @@ class Board:
             current = frontier.get().item
             if current == goal:
                 return cost_so_far[current]
-            neighbors = filter(lambda x:self.board[x[1]][x[0]].type != 'water',[offset_neighbor(current[0], current[1], i) for i in range(6)])
+            neighbors = filter(lambda x: self.board[x[1]][x[0]].type != 'water',
+                               [offset_neighbor(current[0], current[1], i) for i in range(6)])
             for next in neighbors:
                 new_cost = cost_so_far[current] + distance(current, next)
                 if next not in cost_so_far or new_cost < cost_so_far[next]:
@@ -310,6 +311,7 @@ class Board:
                     priority = new_cost + distance(next, goal)
                     frontier.put(PrioritizedItem(priority, next))
                     came_from[next] = current
+
     def update(self):
         self.cell_size = size
 
@@ -349,8 +351,8 @@ def offset_to_cube(col, row):
 
 def distance(a, b):
     return (abs(a[0] - b[0])
-          + abs(a[0] + a[1] - b[0] - b[1])
-          + abs(a[1] - b[1])) / 2
+            + abs(a[0] + a[1] - b[0] - b[1])
+            + abs(a[1] - b[1])) / 2
 
 
 if __name__ == '__main__':
