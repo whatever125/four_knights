@@ -218,26 +218,122 @@ class BoardGenerator:
         self.width = board.width
         self.height = board.height
         self.board = board
-        self.generator = {(i, j): 0 for i in range(self.height) for j in range(self.width)}
+
+        self.number_of_earth_cells = round((self.width * self.height) / 2)
+        self.min_region_cells = round(self.number_of_earth_cells * 0.1)
+        self.max_region_cells = round(self.number_of_earth_cells * 0.2)
+        self.number_of_villages = round((self.width * self.height) / 100)
+        self.region_chance = 40
+
+        self.generator = {(i, j): 'water' for i in range(self.height) for j in range(self.width)}
+
+    def generate(self):
+        self.generate_board()
+        self.generate_forest()
+        self.generate_desert()
+        self.generate_mountain()
+        self.generate_swamp()
+        self.generate_villages()
+        self.update_cells()
 
     def generate_board(self):
         mid_x = self.height // 2 - 1
         mid_y = self.width // 2 - 1
-        self.update_neighbours((mid_x, mid_y), 100)
-        number_of_earth_cells = (self.width * self.height) // 2
-        for _ in range(number_of_earth_cells):
-            neighbours = list(filter(lambda x: self.generator[x] == 1, self.generator))
+        mid_cell = mid_x, mid_y
+        self.generator[mid_cell] = 'plain'
+        self.update_neighbours(mid_cell, 100, 'water', 'pre_plain')
+        for _ in range(self.number_of_earth_cells):
+            neighbours = list(filter(lambda x: self.generator[x] == 'pre_plain', self.generator))
             neighbour = random.choice(neighbours)
-            self.update_neighbours(neighbour, 40)
-        self.update_cells()
+            self.generator[neighbour] = 'plain'
+            self.update_neighbours(neighbour, 40, 'water', 'pre_plain')
+        self.delete_pre_cells()
 
-    def update_neighbours(self, cell, chance):
-        self.generator[cell] = 2
+    def generate_forest(self):
+        available_cells = list(filter(lambda x: self.generator[x] == 'plain', self.generator))
+        first_cell = random.choice(available_cells)
+        self.generator[first_cell] = 'forest'
+        self.update_neighbours(first_cell, 100, 'plain', 'pre_forest')
+        number_of_forest_cells = random.randint(self.min_region_cells, self.max_region_cells)
+        for _ in range(number_of_forest_cells):
+            try:
+                available_cells = list(
+                    filter(lambda x: self.generator[x] == 'pre_forest', self.generator))
+                forest_cell = random.choice(available_cells)
+                self.generator[forest_cell] = 'forest'
+                self.update_neighbours(forest_cell, self.region_chance, 'plain', 'pre_forest')
+            except Exception:
+                pass
+        self.delete_pre_cells()
+
+    def generate_desert(self):
+        available_cells = list(filter(lambda x: self.generator[x] == 'plain', self.generator))
+        first_cell = random.choice(available_cells)
+        self.generator[first_cell] = 'desert'
+        self.update_neighbours(first_cell, 100, 'plain', 'pre_desert')
+        number_of_desert_cells = random.randint(self.min_region_cells, self.max_region_cells)
+        for _ in range(number_of_desert_cells):
+            try:
+                available_cells = list(
+                    filter(lambda x: self.generator[x] == 'pre_desert', self.generator))
+                forest_cell = random.choice(available_cells)
+                self.generator[forest_cell] = 'desert'
+                self.update_neighbours(forest_cell, self.region_chance, 'plain', 'pre_desert')
+            except Exception:
+                pass
+        self.delete_pre_cells()
+
+    def generate_mountain(self):
+        available_cells = list(filter(lambda x: self.generator[x] == 'plain', self.generator))
+        first_cell = random.choice(available_cells)
+        self.generator[first_cell] = 'mountain'
+        self.update_neighbours(first_cell, 100, 'plain', 'pre_mountain')
+        number_of_mountain_cells = random.randint(self.min_region_cells, self.max_region_cells)
+        for _ in range(number_of_mountain_cells):
+            try:
+                available_cells = list(
+                    filter(lambda x: self.generator[x] == 'pre_mountain', self.generator))
+                forest_cell = random.choice(available_cells)
+                self.generator[forest_cell] = 'mountain'
+                self.update_neighbours(forest_cell, self.region_chance, 'plain', 'pre_mountain')
+            except Exception:
+                pass
+        self.delete_pre_cells()
+
+    def generate_swamp(self):
+        available_cells = list(filter(lambda x: self.generator[x] == 'plain', self.generator))
+        first_cell = random.choice(available_cells)
+        self.generator[first_cell] = 'swamp'
+        self.update_neighbours(first_cell, 100, 'plain', 'pre_swamp')
+        number_of_swamp_cells = random.randint(self.min_region_cells, self.max_region_cells)
+        for _ in range(number_of_swamp_cells):
+            try:
+                available_cells = list(
+                    filter(lambda x: self.generator[x] == 'pre_swamp', self.generator))
+                forest_cell = random.choice(available_cells)
+                self.generator[forest_cell] = 'swamp'
+                self.update_neighbours(forest_cell, self.region_chance, 'plain', 'pre_swamp')
+            except Exception:
+                pass
+        self.delete_pre_cells()
+
+    def generate_villages(self):
+        for _ in range(self.number_of_villages):
+            available_cells = list(filter(lambda x: self.generator[x] == 'plain', self.generator))
+            village_cell = random.choice(available_cells)
+            self.generator[village_cell] = 'village'
+
+    def delete_pre_cells(self):
+        for cell in self.generator:
+            if self.generator[cell].startswith('pre'):
+                self.generator[cell] = 'plain'
+
+    def update_neighbours(self, cell, chance, from_region, to_region):
         for direction in range(6):
             try:
                 x, y = offset_neighbor(*cell, direction)
-                if self.generator[(x, y)] == 0 and random.randint(0, 100) <= chance:
-                    self.generator[(x, y)] = 1
+                if self.generator[(x, y)] == from_region and random.randint(0, 100) <= chance:
+                    self.generator[(x, y)] = to_region
             except Exception:
                 pass
 
@@ -246,32 +342,12 @@ class BoardGenerator:
             try:
                 assert 0 <= cell[0] < self.height
                 assert 0 <= cell[1] < self.width
-                if self.generator[cell] == 2:
-                    self.board.update_cell_region(*cell, 'earth')
+                if self.generator[cell].startswith('pre'):
+                    self.board.update_cell_region(*cell, 'plain')
+                else:
+                    self.board.update_cell_region(*cell, self.generator[cell])
             except Exception:
                 pass
-
-
-class VillageGenerator:
-    def __init__(self, board):
-        self.width = board.width
-        self.height = board.height
-        self.board = board
-        self.generator = {(i, j): self.board.board[i][j].region for i in range(self.height)
-                     for j in range(self.width)}
-
-    def generate_villages(self):
-        number_of_villages = (self.width * self.height) // 100
-        for _ in range(number_of_villages):
-            available_cells = list(filter(lambda x: self.generator[x] != 'water', self.generator))
-            village_cell = random.choice(available_cells)
-            self.generator[village_cell] = 'village'
-        self.update_cells()
-
-    def update_cells(self):
-        for cell in self.generator:
-            if self.generator[cell] == 'village':
-                self.board.update_cell_region(*cell, 'village')
 
 
 class Board:
@@ -287,9 +363,7 @@ class Board:
 
     def generate_board(self):
         board_generator = BoardGenerator(self)
-        board_generator.generate_board()
-        village_generator = VillageGenerator(self)
-        village_generator.generate_villages()
+        board_generator.generate()
 
     def get_cell_vertices(self, col, row):
         x = self.cell_size * 3 ** 0.5 * (col + 0.5 * (row % 2))
@@ -310,12 +384,24 @@ class Board:
     def render(self):
         for row in self.board:
             for cell in row:
-                if cell.region == 'earth':
+                if cell.region == 'plain':
                     if cell.coords == self.clicked:
                         pygame.draw.polygon(screen, color_earth_clicked,
                                             self.get_cell_vertices(*cell.coords), 0)
                     else:
                         pygame.draw.polygon(screen, color_earth,
+                                            self.get_cell_vertices(*cell.coords), 0)
+                if cell.region == 'forest':
+                    pygame.draw.polygon(screen, (0, 255, 0),
+                                            self.get_cell_vertices(*cell.coords), 0)
+                if cell.region == 'desert':
+                    pygame.draw.polygon(screen, (255, 255, 0),
+                                            self.get_cell_vertices(*cell.coords), 0)
+                if cell.region == 'mountain':
+                    pygame.draw.polygon(screen, (255, 255, 255),
+                                            self.get_cell_vertices(*cell.coords), 0)
+                if cell.region == 'swamp':
+                    pygame.draw.polygon(screen, (125, 125, 0),
                                             self.get_cell_vertices(*cell.coords), 0)
                 elif cell.region == 'village':
                     if cell.coords == self.clicked:
