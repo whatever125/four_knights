@@ -15,6 +15,32 @@ color_village_highlighted = (179, 149, 105)
 
 color_water = (175, 217, 216)
 
+offset_directions = [
+    [[+1, 0], [0, -1], [-1, -1],
+     [-1, 0], [-1, +1], [0, +1]],
+    [[+1, 0], [+1, -1], [0, -1],
+     [-1, 0], [0, +1], [+1, +1]],
+]
+
+
+def offset_neighbor(row, col, direction):
+    parity = row % 2
+    dir = offset_directions[parity][direction]
+    return row + dir[1], col + dir[0]
+
+
+def cube_to_offset(x, y, z):
+    col = x + (z - (z % 2)) / 2
+    row = z
+    return col, row
+
+
+def offset_to_cube(col, row):
+    x = col - (row - (row % 2)) / 2
+    z = row
+    y = -x - z
+    return x, y, z
+
 
 @dataclass(order=True)
 class PrioritizedItem:
@@ -90,8 +116,8 @@ class Camera:
 
 
 class Cell:
-    def __init__(self, col, row, cell_type='water'):
-        self.type = cell_type
+    def __init__(self, col, row, region='water'):
+        self.region = region
         self.col = col
         self.row = row
         self.coords = (row, col)
@@ -116,14 +142,14 @@ class Unit:
         self.image = pygame.image.load(f'{sprite}.png')
         self.sprite.image = pygame.transform.scale(self.image, (int(size * 2), int(size * 2)))
         self.sprite.rect = self.sprite.image.get_rect()
-        pixel = offset_to_pixel(*self.coords)
+        pixel = self.offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0]
         self.sprite.rect.y = pixel[1]
         sprites.add(self.sprite)
 
     def move_to(self, x, y):
         self.coords = (x, y)
-        pixel = offset_to_pixel(*self.coords)
+        pixel = self.offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0] + camera.dx
         self.sprite.rect.y = pixel[1] + camera.dy
 
@@ -171,7 +197,7 @@ class Unit:
         self.sprite.image = pygame.transform.scale(self.image,
                                                    (int(size * 2), int(size * 2)))
         self.sprite.rect = self.sprite.image.get_rect()
-        pixel = offset_to_pixel(*self.coords)
+        pixel = self.offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0] + camera.dx
         self.sprite.rect.y = pixel[1] + camera.dy
         sprites.add(self.sprite)
@@ -179,6 +205,73 @@ class Unit:
     def move_sprite(self, dx, dy):
         self.sprite.rect.x += dx
         self.sprite.rect.y += dy
+
+    @staticmethod
+    def offset_to_pixel(col, row):
+        x = size * 3 ** 0.5 * (col + 0.5 * (row % 2))
+        y = size * 3 / 2 * row
+        return int(x) + indent, int(y) + indent
+
+
+class BoardGenerator:
+    def __init__(self, board):
+        self.width = board.width
+        self.height = board.height
+        self.board = board
+        self.generator = {(i, j): 0 for i in range(self.height) for j in range(self.width)}
+
+    def generate_board(self):
+        mid_x = self.height // 2 - 1
+        mid_y = self.width // 2 - 1
+        self.update_neighbours((mid_x, mid_y), 100)
+        number_of_earth_cells = (self.width * self.height) // 2
+        for _ in range(number_of_earth_cells):
+            neighbours = list(filter(lambda x: self.generator[x] == 1, self.generator))
+            neighbour = random.choice(neighbours)
+            self.update_neighbours(neighbour, 40)
+        self.update_cells()
+
+    def update_neighbours(self, cell, chance):
+        self.generator[cell] = 2
+        for direction in range(6):
+            try:
+                x, y = offset_neighbor(*cell, direction)
+                if self.generator[(x, y)] == 0 and random.randint(0, 100) <= chance:
+                    self.generator[(x, y)] = 1
+            except Exception:
+                pass
+
+    def update_cells(self):
+        for cell in self.generator:
+            try:
+                assert 0 <= cell[0] < self.height
+                assert 0 <= cell[1] < self.width
+                if self.generator[cell] == 2:
+                    self.board.update_cell_region(*cell, 'earth')
+            except Exception:
+                pass
+
+
+class VillageGenerator:
+    def __init__(self, board):
+        self.width = board.width
+        self.height = board.height
+        self.board = board
+        self.generator = {(i, j): self.board.board[i][j].region for i in range(self.height)
+                     for j in range(self.width)}
+
+    def generate_villages(self):
+        number_of_villages = (self.width * self.height) // 100
+        for _ in range(number_of_villages):
+            available_cells = list(filter(lambda x: self.generator[x] != 'water', self.generator))
+            village_cell = random.choice(available_cells)
+            self.generator[village_cell] = 'village'
+        self.update_cells()
+
+    def update_cells(self):
+        for cell in self.generator:
+            if self.generator[cell] == 'village':
+                self.board.update_cell_region(*cell, 'village')
 
 
 class Board:
@@ -191,48 +284,12 @@ class Board:
         self.selected_unit = None
         self.clicked = ()
         self.generate_board()
-        self.generate_village()
 
     def generate_board(self):
-        generator = {(i, j): 0 for i in range(self.height) for j in range(self.width)}
-        x, y = self.height // 2 - 1, self.width // 2 - 1
-        generator[(x, y)] = 2
-        for direction in range(6):
-            try:
-                y1, x1 = offset_neighbor(y, x, direction)
-                generator[(x1, y1)] = 1
-            except Exception:
-                pass
-        for _ in range((self.width * self.height) // 2):
-            friends = list(filter(lambda x: generator[x] == 1, generator))
-            friend = random.choice(friends)
-            generator[friend] = 2
-            for direction in range(6):
-                try:
-                    y1, x1 = offset_neighbor(friend[1], friend[0], direction)
-                    if generator[(x1, y1)] == 0 and random.randint(0, 100) < 40:
-                        generator[(x1, y1)] = 1
-                except Exception:
-                    pass
-        for i in generator:
-            try:
-                assert 0 <= i[0] < self.height
-                assert 0 <= i[1] < self.width
-                if generator[i] == 2:
-                    self.board[i[0]][i[1]].type = 'earth'
-            except Exception:
-                pass
-
-    def generate_village(self):
-        generator = {(i, j): self.board[i][j].type == 'earth' for i in range(self.height)
-                     for j in range(self.width)}
-        for _ in range((self.width * self.height) // 100):
-            earth = list(filter(lambda x: generator[x] == 1, generator))
-            village = random.choice(earth)
-            generator[village] = 2
-        for i in generator:
-            if generator[i] == 2:
-                self.board[i[0]][i[1]].type = 'village'
+        board_generator = BoardGenerator(self)
+        board_generator.generate_board()
+        village_generator = VillageGenerator(self)
+        village_generator.generate_villages()
 
     def get_cell_vertices(self, col, row):
         x = self.cell_size * 3 ** 0.5 * (col + 0.5 * (row % 2))
@@ -253,21 +310,21 @@ class Board:
     def render(self):
         for row in self.board:
             for cell in row:
-                if cell.type == 'earth':
+                if cell.region == 'earth':
                     if cell.coords == self.clicked:
                         pygame.draw.polygon(screen, color_earth_clicked,
                                             self.get_cell_vertices(*cell.coords), 0)
                     else:
                         pygame.draw.polygon(screen, color_earth,
                                             self.get_cell_vertices(*cell.coords), 0)
-                elif cell.type == 'village':
+                elif cell.region == 'village':
                     if cell.coords == self.clicked:
                         pygame.draw.polygon(screen, color_village_clicked,
                                             self.get_cell_vertices(*cell.coords), 0)
                     else:
                         pygame.draw.polygon(screen, color_village,
                                             self.get_cell_vertices(*cell.coords), 0)
-                if cell.type != 'water':
+                if cell.region != 'water':
                     pygame.draw.polygon(screen, color_earth_clicked,
                                         self.get_cell_vertices(*cell.coords), 1)
 
@@ -328,7 +385,7 @@ class Board:
                     self.selected_unit = None
                     self.clicked = None
                     return
-        if self.board[cell_coords[1]][cell_coords[0]].type == 'water':
+        if self.board[cell_coords[1]][cell_coords[0]].region == 'water':
             self.selected_unit = None
         elif not select and self.selected_unit and \
                 self.find_path(self.selected_unit.coords, cell_coords) <= self.selected_unit.speed:
@@ -347,106 +404,104 @@ class Board:
             current = frontier.get().item
             if current == goal:
                 return cost_so_far[current]
-            neighbors = filter(lambda x: self.board[x[1]][x[0]].type != 'water',
-                               [offset_neighbor(current[0], current[1], i) for i in range(6)])
+            neighbors = filter(lambda x: self.board[x[1]][x[0]].region != 'water',
+                               [offset_neighbor(*current, i) for i in range(6)])
             for next in neighbors:
-                new_cost = cost_so_far[current] + distance(current, next)
+                new_cost = cost_so_far[current] + self.distance(current, next)
                 if next not in cost_so_far or new_cost < cost_so_far[next]:
                     cost_so_far[next] = new_cost
-                    priority = new_cost + distance(next, goal)
+                    priority = new_cost + self.distance(next, goal)
                     frontier.put(PrioritizedItem(priority, next))
                     came_from[next] = current
 
+    @staticmethod
+    def distance(a, b):
+        return (abs(a[0] - b[0])
+                + abs(a[0] + a[1] - b[0] - b[1])
+                + abs(a[1] - b[1])) / 2
+
     def update_cell_size(self):
         self.cell_size = size
+
+    def update_cell_region(self, x, y, region):
+        self.board[x][y].region = region
 
     def delete_unit(self, unit):
         self.units = list(filter(lambda x: x != unit, self.units))
 
 
-offset_directions = [
-    [[+1, 0], [0, -1], [-1, -1],
-     [-1, 0], [-1, +1], [0, +1]],
-    [[+1, 0], [+1, -1], [0, -1],
-     [-1, 0], [0, +1], [+1, +1]],
-]
+class Application:
+    def start(self):
+        self.main()
 
+    def main(self):
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.terminate()
+                    return
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1:
+                        board.get_click(event.pos)
+                    if event.button == 4:
+                        self.zoom_in()
+                    if event.button == 5:
+                        self.zoom_out()
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_z:
+                        self.zoom_to_original_position()
+            screen.fill(color_water)
+            camera.update()
+            board.render()
+            sprites.draw(screen)
+            pygame.display.flip()
+            clock.tick(fps)
 
-def offset_to_pixel(col, row):
-    x = size * 3 ** 0.5 * (col + 0.5 * (row % 2))
-    y = size * 3 / 2 * row
-    return int(x) + indent, int(y) + indent
+    @staticmethod
+    def zoom_in():
+        global size, delta, screen_width, screen_height
+        if round(size * 1.1) <= 50:
+            size = round(size * 1.1)
+            delta = round(delta * 1.1)
+            screen_width = round(screen_width * 1.1)
+            screen_height = round(screen_height * 1.1)
+            camera.dx = round(camera.dx * 1.1 - screen_size[0] * 0.05)
+            camera.dy = round(camera.dy * 1.1 - screen_size[1] * 0.05)
+            board.update_cell_size()
+            for unit in board.units:
+                unit.update()
 
+    @staticmethod
+    def zoom_out():
+        global size, delta, screen_width, screen_height
+        if round(size / 1.1) >= 10:
+            size = round(size / 1.1)
+            delta = round(delta / 1.1)
+            screen_width = round(screen_width / 1.1)
+            screen_height = round(screen_height / 1.1)
+            camera.dx = round(camera.dx / 1.1 + screen_size[0] * 0.045)
+            camera.dy = round(camera.dy / 1.1 + screen_size[1] * 0.045)
+            board.update_cell_size()
+            for unit in board.units:
+                unit.update()
 
-def offset_neighbor(col, row, direction):
-    parity = row % 2
-    dir = offset_directions[parity][direction]
-    return col + dir[0], row + dir[1]
-
-
-def cube_to_offset(x, y, z):
-    col = x + (z - (z % 2)) / 2
-    row = z
-    return col, row
-
-
-def offset_to_cube(col, row):
-    x = col - (row - (row % 2)) / 2
-    z = row
-    y = -x - z
-    return x, y, z
-
-
-def distance(a, b):
-    return (abs(a[0] - b[0])
-            + abs(a[0] + a[1] - b[0] - b[1])
-            + abs(a[1] - b[1])) / 2
-
-
-def zoom_to_original_position():
-    global size, delta, screen_width, screen_height
-    camera.dx = 0
-    camera.dy = 0
-    size = original_size
-    delta = original_delta
-    screen_width = screen_size[0]
-    screen_height = screen_size[1]
-    board.update_cell_size()
-    for unit in board.units:
-        unit.update()
-
-
-def zoom_in():
-    global size, delta, screen_width, screen_height
-    if round(size * 1.1) <= 50:
-        size = round(size * 1.1)
-        delta = round(delta * 1.1)
-        screen_width = round(screen_width * 1.1)
-        screen_height = round(screen_height * 1.1)
-        camera.dx = round(camera.dx * 1.1 - screen_size[0] * 0.05)
-        camera.dy = round(camera.dy * 1.1 - screen_size[1] * 0.05)
+    @staticmethod
+    def zoom_to_original_position():
+        global size, delta, screen_width, screen_height
+        camera.dx = 0
+        camera.dy = 0
+        size = original_size
+        delta = original_delta
+        screen_width = screen_size[0]
+        screen_height = screen_size[1]
         board.update_cell_size()
         for unit in board.units:
             unit.update()
 
-
-def zoom_out():
-    global size, delta, screen_width, screen_height
-    if round(size / 1.1) >= 10:
-        size = round(size / 1.1)
-        delta = round(delta / 1.1)
-        screen_width = round(screen_width / 1.1)
-        screen_height = round(screen_height / 1.1)
-        camera.dx = round(camera.dx / 1.1 + screen_size[0] * 0.045)
-        camera.dy = round(camera.dy / 1.1 + screen_size[1] * 0.045)
-        board.update_cell_size()
-        for unit in board.units:
-            unit.update()
-
-
-def terminate():
-    pygame.quit()
-    sys.exit()
+    @staticmethod
+    def terminate():
+        pygame.quit()
+        sys.exit()
 
 
 if __name__ == '__main__':
@@ -458,35 +513,13 @@ if __name__ == '__main__':
     delta = original_delta = 3
     indent = 50
     board = Board(width, height, size)
-
     screen_size = screen_width, screen_height = round(width * size * 3 ** 0.5 + indent * 2), \
                                                 round(height * size * 1.5 + indent * 2)
     screen = pygame.display.set_mode(screen_size)
     screen.fill(color_water)
     fps = 60
     clock = pygame.time.Clock()
-
     camera = Camera()
 
-    running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-                terminate()
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:
-                    board.get_click(event.pos)
-                if event.button == 4:
-                    zoom_in()
-                if event.button == 5:
-                    zoom_out()
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_z:
-                    zoom_to_original_position()
-        screen.fill(color_water)
-        camera.update()
-        board.render()
-        sprites.draw(screen)
-        pygame.display.flip()
-        clock.tick(fps)
+    app = Application()
+    app.start()
