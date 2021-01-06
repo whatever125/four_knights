@@ -1,5 +1,6 @@
 import pygame
 import random
+import sys
 from queue import PriorityQueue
 from dataclasses import dataclass, field
 from typing import Any
@@ -14,6 +15,32 @@ color_village_highlighted = (179, 149, 105)
 
 color_water = (175, 217, 216)
 
+offset_directions = [
+    [[+1, 0], [0, -1], [-1, -1],
+     [-1, 0], [-1, +1], [0, +1]],
+    [[+1, 0], [+1, -1], [0, -1],
+     [-1, 0], [0, +1], [+1, +1]],
+]
+
+
+def offset_neighbor(row, col, direction):
+    parity = row % 2
+    dir = offset_directions[parity][direction]
+    return row + dir[1], col + dir[0]
+
+
+def cube_to_offset(x, y, z):
+    col = x + (z - (z % 2)) / 2
+    row = z
+    return col, row
+
+
+def offset_to_cube(col, row):
+    x = col - (row - (row % 2)) / 2
+    z = row
+    y = -x - z
+    return x, y, z
+
 
 @dataclass(order=True)
 class PrioritizedItem:
@@ -23,39 +50,74 @@ class PrioritizedItem:
 
 class Camera:
     def __init__(self):
-        self.dx, self.dy = 0, 0
+        self.dx = 0
+        self.dy = 0
 
     def apply(self, obj):
         obj.rect.x += self.dx
         obj.rect.y += self.dy
 
     def update(self):
+        if self.mouse_is_on_the_left():
+            self.move_camera_and_units_to_the_right()
+
+        if self.mouse_is_on_the_right():
+            self.move_camera_and_units_to_the_left()
+
+        if self.mouse_is_at_the_bottom():
+            self.move_camera_and_units_to_the_top()
+
+        if self.mouse_is_at_the_top():
+            self.move_camera_and_units_to_the_bottom()
+
+    @staticmethod
+    def mouse_is_on_the_left():
         x, y = pygame.mouse.get_pos()
-        if x <= screen_size[0] * 0.1 and x != 0 and y != 0 and \
-                x != screen_size[0] - 1 and y != screen_size[1] - 1:
-            self.dx += delta
-            for unit in board.units:
-                unit.sprite.rect.x += delta
-        if y <= screen_size[1] * 0.1 and x != 0 and y != 0 and \
-                x != screen_size[0] - 1 and y != screen_size[1] - 1:
-            self.dy += delta
-            for unit in board.units:
-                unit.sprite.rect.y += delta
-        if x >= screen_size[0] * 0.9 and x != 0 and y != 0 and \
-                x != screen_size[0] - 1 and y != screen_size[1] - 1:
-            self.dx -= delta
-            for unit in board.units:
-                unit.sprite.rect.x -= delta
-        if y >= screen_size[1] * 0.9 and x != 0 and y != 0 and \
-                x != screen_size[0] - 1 and y != screen_size[1] - 1:
-            self.dy -= delta
-            for unit in board.units:
-                unit.sprite.rect.y -= delta
+        return x <= screen_size[0] * 0.1 and x != 0 and y != 0 and \
+               x != screen_size[0] - 1 and y != screen_size[1] - 1
+
+    @staticmethod
+    def mouse_is_on_the_right():
+        x, y = pygame.mouse.get_pos()
+        return x >= screen_size[0] * 0.9 and x != 0 and y != 0 and \
+               x != screen_size[0] - 1 and y != screen_size[1] - 1
+
+    @staticmethod
+    def mouse_is_at_the_bottom():
+        x, y = pygame.mouse.get_pos()
+        return y <= screen_size[1] * 0.1 and x != 0 and y != 0 and \
+               x != screen_size[0] - 1 and y != screen_size[1] - 1
+
+    @staticmethod
+    def mouse_is_at_the_top():
+        x, y = pygame.mouse.get_pos()
+        return y >= screen_size[1] * 0.9 and x != 0 and y != 0 and \
+               x != screen_size[0] - 1 and y != screen_size[1] - 1
+
+    def move_camera_and_units_to_the_right(self):
+        self.dx += delta
+        for unit in board.units:
+            unit.move_sprite(delta, 0)
+
+    def move_camera_and_units_to_the_left(self):
+        self.dx -= delta
+        for unit in board.units:
+            unit.move_sprite(-delta, 0)
+
+    def move_camera_and_units_to_the_top(self):
+        self.dy += delta
+        for unit in board.units:
+            unit.move_sprite(0, delta)
+
+    def move_camera_and_units_to_the_bottom(self):
+        self.dy -= delta
+        for unit in board.units:
+            unit.move_sprite(0, -delta)
 
 
 class Cell:
-    def __init__(self, col, row, cell_type='water'):
-        self.type = cell_type
+    def __init__(self, col, row, region='water'):
+        self.region = region
         self.col = col
         self.row = row
         self.coords = (row, col)
@@ -73,223 +135,263 @@ class Unit:
         self.melee = melee
         self.ranged = ranged
         self.defence = 0.5
+        self.load_sprite(sprite)
+
+    def load_sprite(self, sprite):
         self.sprite = pygame.sprite.Sprite()
         self.image = pygame.image.load(f'{sprite}.png')
         self.sprite.image = pygame.transform.scale(self.image, (int(size * 2), int(size * 2)))
         self.sprite.rect = self.sprite.image.get_rect()
-        pixel = offset_to_pixel(self.coords[0], self.coords[1])
+        pixel = self.offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0]
         self.sprite.rect.y = pixel[1]
         sprites.add(self.sprite)
 
-    def move(self, x, y):
+    def move_to(self, x, y):
         self.coords = (x, y)
-        pixel = offset_to_pixel(self.coords[0], self.coords[1])
+        pixel = self.offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0] + camera.dx
         self.sprite.rect.y = pixel[1] + camera.dy
 
     def die(self):
-        self.board.units = list(filter(lambda x: x != self, self.board.units))
+        board.delete_unit(self)
         sprites.remove(self.sprite)
 
-    def attack(self, attack, enemy):
-        if attack['type'] == 'melee':
-            for i in range(attack['attacks']):
-                if random.random() + attack['mod'] > enemy.defence:
-                    enemy.hp -= attack['damage']
+    def melee_attack(self, attack, enemy):
+        for i in range(attack['attacks']):
+            if random.random() + attack['mod'] > enemy.defence:
+                enemy.take_damage(attack['damage'])
+                print(self.hp, enemy.hp)
+                if enemy.hp <= 0:
+                    enemy.die()
+                    return
+        if enemy.melee:
+            for i in range(enemy.melee['attacks']):
+                if random.random() + enemy.melee['mod'] > self.defence:
+                    self.take_damage(enemy.melee['damage'])
                     print(self.hp, enemy.hp)
-                    if enemy.hp <= 0:
-                        enemy.die()
+                    if self.hp <= 0:
+                        self.die()
                         return
-            if enemy.melee:
-                for i in range(enemy.melee['attacks']):
-                    if random.random() + enemy.melee['mod'] > self.defence:
-                        self.hp -= enemy.melee['damage']
-                        print(self.hp, enemy.hp)
-                        if self.hp <= 0:
-                            self.die()
-                            return
-        if attack['type'] == 'ranged':
-            for i in range(attack['attacks']):
-                if random.random() + attack['mod'] > enemy.defence:
-                    enemy.hp -= attack['damage']
-                    if enemy.hp <= 0:
-                        enemy.die()
+
+    def ranged_attack(self, attack, enemy):
+        for i in range(attack['attacks']):
+            if random.random() + attack['mod'] > enemy.defence:
+                enemy.take_damage(attack['damage'])
+                if enemy.hp <= 0:
+                    enemy.die()
+                    return
+        if enemy.ranged:
+            for i in range(enemy.ranged['attacks']):
+                if random.random() + enemy.ranged['mod'] > self.defence:
+                    self.take_damage(enemy.ranged['damage'])
+                    if self.hp <= 0:
+                        self.die()
                         return
-            if enemy.ranged:
-                for i in range(enemy.ranged['attacks']):
-                    if random.random() + enemy.ranged['mod'] > self.defence:
-                        self.hp -= enemy.ranged['damage']
-                        if self.hp <= 0:
-                            self.die()
-                            return
+
+    def take_damage(self, damage):
+        self.hp -= damage
 
     def update(self):
         sprites.remove(self.sprite)
         self.sprite.image = pygame.transform.scale(self.image,
                                                    (int(size * 2), int(size * 2)))
         self.sprite.rect = self.sprite.image.get_rect()
-        pixel = offset_to_pixel(self.coords[0], self.coords[1])
+        pixel = self.offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0] + camera.dx
         self.sprite.rect.y = pixel[1] + camera.dy
         sprites.add(self.sprite)
 
+    def move_sprite(self, dx, dy):
+        self.sprite.rect.x += dx
+        self.sprite.rect.y += dy
+
+    @staticmethod
+    def offset_to_pixel(col, row):
+        x = size * 3 ** 0.5 * (col + 0.5 * (row % 2))
+        y = size * 3 / 2 * row
+        return int(x) + indent, int(y) + indent
+
+
+class BoardGenerator:
+    def __init__(self, board):
+        self.width = board.width
+        self.height = board.height
+        self.board = board
+        self.generator = {(i, j): 0 for i in range(self.height) for j in range(self.width)}
+
+    def generate_board(self):
+        mid_x = self.height // 2 - 1
+        mid_y = self.width // 2 - 1
+        self.update_neighbours((mid_x, mid_y), 100)
+        number_of_earth_cells = (self.width * self.height) // 2
+        for _ in range(number_of_earth_cells):
+            neighbours = list(filter(lambda x: self.generator[x] == 1, self.generator))
+            neighbour = random.choice(neighbours)
+            self.update_neighbours(neighbour, 40)
+        self.update_cells()
+
+    def update_neighbours(self, cell, chance):
+        self.generator[cell] = 2
+        for direction in range(6):
+            try:
+                x, y = offset_neighbor(*cell, direction)
+                if self.generator[(x, y)] == 0 and random.randint(0, 100) <= chance:
+                    self.generator[(x, y)] = 1
+            except Exception:
+                pass
+
+    def update_cells(self):
+        for cell in self.generator:
+            try:
+                assert 0 <= cell[0] < self.height
+                assert 0 <= cell[1] < self.width
+                if self.generator[cell] == 2:
+                    self.board.update_cell_region(*cell, 'earth')
+            except Exception:
+                pass
+
+
+class VillageGenerator:
+    def __init__(self, board):
+        self.width = board.width
+        self.height = board.height
+        self.board = board
+        self.generator = {(i, j): self.board.board[i][j].region for i in range(self.height)
+                     for j in range(self.width)}
+
+    def generate_villages(self):
+        number_of_villages = (self.width * self.height) // 100
+        for _ in range(number_of_villages):
+            available_cells = list(filter(lambda x: self.generator[x] != 'water', self.generator))
+            village_cell = random.choice(available_cells)
+            self.generator[village_cell] = 'village'
+        self.update_cells()
+
+    def update_cells(self):
+        for cell in self.generator:
+            if self.generator[cell] == 'village':
+                self.board.update_cell_region(*cell, 'village')
+
 
 class Board:
-    def __init__(self, width, height, cell_size, indent):
+    def __init__(self, width, height, cell_size):
         self.width = width
         self.height = height
         self.cell_size = cell_size
-        self.indent = indent
         self.board = [[Cell(i, j) for j in range(self.width)] for i in range(self.height)]
         self.units = [Unit((20, 20), self), Unit((21, 21), self)]
         self.selected_unit = None
         self.clicked = ()
         self.generate_board()
-        self.generate_village()
 
     def generate_board(self):
-        generator = {(i, j): 0 for i in range(self.height) for j in range(self.width)}
-        x, y = self.height // 2 - 1, self.width // 2 - 1
-        generator[(x, y)] = 2
-        for direct in range(6):
-            try:
-                y1, x1 = offset_neighbor(y, x, direct)
-                generator[(x1, y1)] = 1
-            except Exception:
-                pass
-        for _ in range((self.width * self.height) // 2):
-            friends = list(filter(lambda x: generator[x] == 1, generator))
-            friend = random.choice(friends)
-            generator[friend] = 2
-            for direct in range(6):
-                try:
-                    y1, x1 = offset_neighbor(friend[1], friend[0], direct)
-                    if generator[(x1, y1)] == 0 and random.randint(0, 100) < 40:
-                        generator[(x1, y1)] = 1
-                except Exception:
-                    pass
-        for i in generator:
-            try:
-                assert 0 <= i[0] < self.height
-                assert 0 <= i[1] < self.width
-                if generator[i] == 2:
-                    self.board[i[0]][i[1]].type = 'earth'
-            except Exception:
-                pass
+        board_generator = BoardGenerator(self)
+        board_generator.generate_board()
+        village_generator = VillageGenerator(self)
+        village_generator.generate_villages()
 
-    def generate_village(self):
-        generator = {(i, j): self.board[i][j].type == 'earth' for i in range(self.height) for j in
-                     range(self.width)}
-        for _ in range((self.width * self.height) // 100):
-            earth = list(filter(lambda x: generator[x] == 1, generator))
-            village = random.choice(earth)
-            generator[village] = 2
-        for i in generator:
-            if generator[i] == 2:
-                self.board[i[0]][i[1]].type = 'village'
-
-    def offset_to_pixel(self, col, row):
+    def get_cell_vertices(self, col, row):
         x = self.cell_size * 3 ** 0.5 * (col + 0.5 * (row % 2))
         y = self.cell_size * 1.5 * row
-        return (int(x + 3 ** 0.5 * self.cell_size / 2) + self.indent + camera.dx,
-                int(y) + self.indent + camera.dy), \
-               (int(x + 3 ** 0.5 * self.cell_size) + self.indent + camera.dx,
-                int(y + 0.5 * self.cell_size) + self.indent + camera.dy), \
-               (int(x + 3 ** 0.5 * self.cell_size) + self.indent + camera.dx,
-                int(y + 1.5 * self.cell_size) + self.indent + camera.dy), \
-               (int(x + 3 ** 0.5 * self.cell_size / 2) + self.indent + camera.dx,
-                int(y + 2 * self.cell_size) + self.indent + camera.dy), \
-               (int(x) + self.indent + camera.dx,
-                int(y + 1.5 * self.cell_size) + self.indent + camera.dy), \
-               (int(x) + self.indent + camera.dx,
-                int(y + 0.5 * self.cell_size) + self.indent + camera.dy)
+        return (int(x + 3 ** 0.5 * self.cell_size / 2) + indent + camera.dx,
+                int(y) + indent + camera.dy), \
+               (int(x + 3 ** 0.5 * self.cell_size) + indent + camera.dx,
+                int(y + 0.5 * self.cell_size) + indent + camera.dy), \
+               (int(x + 3 ** 0.5 * self.cell_size) + indent + camera.dx,
+                int(y + 1.5 * self.cell_size) + indent + camera.dy), \
+               (int(x + 3 ** 0.5 * self.cell_size / 2) + indent + camera.dx,
+                int(y + 2 * self.cell_size) + indent + camera.dy), \
+               (int(x) + indent + camera.dx,
+                int(y + 1.5 * self.cell_size) + indent + camera.dy), \
+               (int(x) + indent + camera.dx,
+                int(y + 0.5 * self.cell_size) + indent + camera.dy)
 
     def render(self):
         for row in self.board:
             for cell in row:
-                if cell.type == 'earth':
+                if cell.region == 'earth':
                     if cell.coords == self.clicked:
                         pygame.draw.polygon(screen, color_earth_clicked,
-                                            self.offset_to_pixel(*cell.coords), 0)
+                                            self.get_cell_vertices(*cell.coords), 0)
                     else:
                         pygame.draw.polygon(screen, color_earth,
-                                            self.offset_to_pixel(*cell.coords), 0)
-                elif cell.type == 'village':
+                                            self.get_cell_vertices(*cell.coords), 0)
+                elif cell.region == 'village':
                     if cell.coords == self.clicked:
                         pygame.draw.polygon(screen, color_village_clicked,
-                                            self.offset_to_pixel(*cell.coords), 0)
+                                            self.get_cell_vertices(*cell.coords), 0)
                     else:
                         pygame.draw.polygon(screen, color_village,
-                                            self.offset_to_pixel(*cell.coords), 0)
-                if cell.type != 'water':
+                                            self.get_cell_vertices(*cell.coords), 0)
+                if cell.region != 'water':
                     pygame.draw.polygon(screen, color_earth_clicked,
-                                        self.offset_to_pixel(*cell.coords), 1)
+                                        self.get_cell_vertices(*cell.coords), 1)
 
     def get_cell(self, mouse_pos):
         x, y = mouse_pos
-        x -= self.indent
+        x -= indent
         x -= camera.dx
-        y -= self.indent
+        y -= indent
         y -= camera.dy
-        gridHeight = self.cell_size * 1.5
-        gridWidth = self.cell_size * 3 ** 0.5
-        halfWidth = gridWidth / 2
+        grid_height = self.cell_size * 1.5
+        grid_width = self.cell_size * 3 ** 0.5
+        half_width = grid_width / 2
         c = 0.5 * self.cell_size
-        m = c / halfWidth
-        row = y // gridHeight
-        rowIsOdd = row % 2 == 1
+        m = c / half_width
+        row = y // grid_height
+        row_is_odd = row % 2 == 1
 
-        if rowIsOdd:
-            column = (x - halfWidth) // gridWidth
+        if row_is_odd:
+            column = (x - half_width) // grid_width
         else:
-            column = x // gridWidth
-        relY = y - (row * gridHeight)
+            column = x // grid_width
+        rel_y = y - (row * grid_height)
 
-        if rowIsOdd:
-            relX = (x - (column * gridWidth)) - halfWidth
+        if row_is_odd:
+            rel_x = (x - (column * grid_width)) - half_width
         else:
-            relX = x - (column * gridWidth)
-        if relY < (-m * relX) + c:
+            rel_x = x - (column * grid_width)
+        if rel_y < (-m * rel_x) + c:
             row -= 1
-            if not rowIsOdd:
+            if not row_is_odd:
                 column -= 1
-        elif relY < (m * relX) - c:
+        elif rel_y < (m * rel_x) - c:
             row -= 1
-            if rowIsOdd:
+            if row_is_odd:
                 column += 1
 
         return int(column), int(row)
-
-    def on_click(self, cell_coords):
-        self.clicked = cell_coords
-        select = False
-        if not self.selected_unit or int(
-                self.find_path(cell_coords, self.selected_unit.coords)) != 1:
-            for i in self.units:
-                if i.coords == cell_coords:
-                    self.selected_unit = i
-                    select = True
-        elif int(self.find_path(cell_coords, self.selected_unit.coords)) == 1:
-            for i in self.units:
-                if i.coords == cell_coords:
-                    self.selected_unit.attack(self.selected_unit.melee, i)
-                    self.selected_unit = None
-                    self.clicked = None
-                    return
-        if self.board[cell_coords[1]][cell_coords[0]].type == 'water':
-            self.selected_unit = None
-        elif not select and self.selected_unit and \
-                self.find_path(self.selected_unit.coords, cell_coords) <= self.selected_unit.speed:
-            self.selected_unit.move(*cell_coords)
-            self.selected_unit = None
-            self.clicked = None
 
     def get_click(self, mouse_pos):
         cell = self.get_cell(mouse_pos)
         x, y = cell
         if 0 <= x < self.height and 0 <= y < self.width:
             self.on_click(cell)
+
+    def on_click(self, cell_coords):
+        self.clicked = cell_coords
+        select = False
+        if not self.selected_unit or int(
+                self.find_path(cell_coords, self.selected_unit.coords)) != 1:
+            for unit in self.units:
+                if unit.coords == cell_coords:
+                    self.selected_unit = unit
+                    select = True
+        elif int(self.find_path(cell_coords, self.selected_unit.coords)) == 1:
+            for unit in self.units:
+                if unit.coords == cell_coords:
+                    self.selected_unit.melee_attack(self.selected_unit.melee, unit)
+                    self.selected_unit = None
+                    self.clicked = None
+                    return
+        if self.board[cell_coords[1]][cell_coords[0]].region == 'water':
+            self.selected_unit = None
+        elif not select and self.selected_unit and \
+                self.find_path(self.selected_unit.coords, cell_coords) <= self.selected_unit.speed:
+            self.selected_unit.move_to(*cell_coords)
+            self.selected_unit = None
+            self.clicked = None
 
     def find_path(self, start, goal):
         frontier = PriorityQueue()
@@ -302,57 +404,104 @@ class Board:
             current = frontier.get().item
             if current == goal:
                 return cost_so_far[current]
-            neighbors = filter(lambda x: self.board[x[1]][x[0]].type != 'water',
-                               [offset_neighbor(current[0], current[1], i) for i in range(6)])
+            neighbors = filter(lambda x: self.board[x[1]][x[0]].region != 'water',
+                               [offset_neighbor(*current, i) for i in range(6)])
             for next in neighbors:
-                new_cost = cost_so_far[current] + distance(current, next)
+                new_cost = cost_so_far[current] + self.distance(current, next)
                 if next not in cost_so_far or new_cost < cost_so_far[next]:
                     cost_so_far[next] = new_cost
-                    priority = new_cost + distance(next, goal)
+                    priority = new_cost + self.distance(next, goal)
                     frontier.put(PrioritizedItem(priority, next))
                     came_from[next] = current
 
-    def update(self):
+    @staticmethod
+    def distance(a, b):
+        return (abs(a[0] - b[0])
+                + abs(a[0] + a[1] - b[0] - b[1])
+                + abs(a[1] - b[1])) / 2
+
+    def update_cell_size(self):
         self.cell_size = size
 
+    def update_cell_region(self, x, y, region):
+        self.board[x][y].region = region
 
-offset_directions = [
-    [[+1, 0], [0, -1], [-1, -1],
-     [-1, 0], [-1, +1], [0, +1]],
-    [[+1, 0], [+1, -1], [0, -1],
-     [-1, 0], [0, +1], [+1, +1]],
-]
+    def delete_unit(self, unit):
+        self.units = list(filter(lambda x: x != unit, self.units))
 
 
-def offset_to_pixel(col, row):
-    x = size * 3 ** 0.5 * (col + 0.5 * (row % 2))
-    y = size * 3 / 2 * row
-    return int(x) + indent, int(y) + indent
+class Application:
+    def start(self):
+        self.main()
 
+    def main(self):
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.terminate()
+                    return
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1:
+                        board.get_click(event.pos)
+                    if event.button == 4:
+                        self.zoom_in()
+                    if event.button == 5:
+                        self.zoom_out()
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_z:
+                        self.zoom_to_original_position()
+            screen.fill(color_water)
+            camera.update()
+            board.render()
+            sprites.draw(screen)
+            pygame.display.flip()
+            clock.tick(fps)
 
-def offset_neighbor(col, row, direction):
-    parity = row % 2
-    dir = offset_directions[parity][direction]
-    return col + dir[0], row + dir[1]
+    @staticmethod
+    def zoom_in():
+        global size, delta, screen_width, screen_height
+        if round(size * 1.1) <= 50:
+            size = round(size * 1.1)
+            delta = round(delta * 1.1)
+            screen_width = round(screen_width * 1.1)
+            screen_height = round(screen_height * 1.1)
+            camera.dx = round(camera.dx * 1.1 - screen_size[0] * 0.05)
+            camera.dy = round(camera.dy * 1.1 - screen_size[1] * 0.05)
+            board.update_cell_size()
+            for unit in board.units:
+                unit.update()
 
+    @staticmethod
+    def zoom_out():
+        global size, delta, screen_width, screen_height
+        if round(size / 1.1) >= 10:
+            size = round(size / 1.1)
+            delta = round(delta / 1.1)
+            screen_width = round(screen_width / 1.1)
+            screen_height = round(screen_height / 1.1)
+            camera.dx = round(camera.dx / 1.1 + screen_size[0] * 0.045)
+            camera.dy = round(camera.dy / 1.1 + screen_size[1] * 0.045)
+            board.update_cell_size()
+            for unit in board.units:
+                unit.update()
 
-def cube_to_offset(x, y, z):
-    col = x + (z - (z % 2)) / 2
-    row = z
-    return col, row
+    @staticmethod
+    def zoom_to_original_position():
+        global size, delta, screen_width, screen_height
+        camera.dx = 0
+        camera.dy = 0
+        size = original_size
+        delta = original_delta
+        screen_width = screen_size[0]
+        screen_height = screen_size[1]
+        board.update_cell_size()
+        for unit in board.units:
+            unit.update()
 
-
-def offset_to_cube(col, row):
-    x = col - (row - (row % 2)) / 2
-    z = row
-    y = -x - z
-    return x, y, z
-
-
-def distance(a, b):
-    return (abs(a[0] - b[0])
-            + abs(a[0] + a[1] - b[0] - b[1])
-            + abs(a[1] - b[1])) / 2
+    @staticmethod
+    def terminate():
+        pygame.quit()
+        sys.exit()
 
 
 if __name__ == '__main__':
@@ -363,61 +512,14 @@ if __name__ == '__main__':
     size = original_size = 15
     delta = original_delta = 3
     indent = 50
-    board = Board(width, height, size, indent)
-
+    board = Board(width, height, size)
     screen_size = screen_width, screen_height = round(width * size * 3 ** 0.5 + indent * 2), \
                                                 round(height * size * 1.5 + indent * 2)
     screen = pygame.display.set_mode(screen_size)
     screen.fill(color_water)
     fps = 60
     clock = pygame.time.Clock()
-
     camera = Camera()
 
-    running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:
-                    board.get_click(event.pos)
-                if event.button == 4:
-                    if round(size * 1.1) <= 50:
-                        size = round(size * 1.1)
-                        delta = round(delta * 1.1)
-                        screen_width = round(screen_width * 1.1)
-                        screen_height = round(screen_height * 1.1)
-                        camera.dx = round(camera.dx * 1.1 - screen_size[0] * 0.05)
-                        camera.dy = round(camera.dy * 1.1 - screen_size[1] * 0.05)
-                        board.update()
-                        for unit in board.units:
-                            unit.update()
-                if event.button == 5:
-                    if round(size / 1.1) >= 10:
-                        size = round(size / 1.1)
-                        delta = round(delta / 1.1)
-                        screen_width = round(screen_width / 1.1)
-                        screen_height = round(screen_height / 1.1)
-                        camera.dx = round(camera.dx / 1.1 + screen_size[0] * 0.045)
-                        camera.dy = round(camera.dy / 1.1 + screen_size[1] * 0.045)
-                        board.update()
-                        for unit in board.units:
-                            unit.update()
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_z:
-                    camera.dx = 0
-                    camera.dy = 0
-                    size = original_size
-                    delta = original_delta
-                    screen_width = screen_size[0]
-                    screen_height = screen_size[1]
-                    board.update()
-                    for unit in board.units:
-                        unit.update()
-        screen.fill(color_water)
-        camera.update()
-        board.render()
-        sprites.draw(screen)
-        pygame.display.flip()
-        clock.tick(fps)
+    app = Application()
+    app.start()
