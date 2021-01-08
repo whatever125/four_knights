@@ -259,14 +259,6 @@ class Board:
     def update_cell_region(self, x, y, region):
         self.board[x][y].region = region
 
-    def update_units(self):
-        for unit in self.units:
-            unit.update()
-
-    def move_units(self, dx, dy):
-        for unit in self.units:
-            unit.move_sprite(dx, dy)
-
     def update_cells(self):
         for row in self.board:
             for cell in row:
@@ -276,6 +268,14 @@ class Board:
         for row in self.board:
             for cell in row:
                 cell.move_sprite(dx, dy)
+
+    def update_units(self):
+        for unit in self.units:
+            unit.update()
+
+    def move_units(self, dx, dy):
+        for unit in self.units:
+            unit.move_sprite(dx, dy)
 
     def delete_unit(self, unit):
         self.units = list(filter(lambda x: x != unit, self.units))
@@ -291,6 +291,7 @@ class BoardGenerator:
         self.min_region_cells = round(self.number_of_earth_cells * 0.2)
         self.max_region_cells = round(self.number_of_earth_cells * 0.25)
         self.number_of_villages = round((self.width * self.height) / 100)
+        self.number_of_castles = 2  # TODO Изменение количества замков
         self.region_chance = 40
 
         self.generator = {(i, j): 'water' for i in range(self.height) for j in range(self.width)}
@@ -302,6 +303,7 @@ class BoardGenerator:
         self.generate_mountain()
         self.generate_swamp()
         self.generate_villages()
+        self.generate_castles()
         self.update_cells()
 
     def generate_board(self):
@@ -391,6 +393,12 @@ class BoardGenerator:
             village_cell = random.choice(available_cells)
             self.generator[village_cell] = 'village'
 
+    def generate_castles(self):
+        for _ in range(self.number_of_castles):
+            available_cells = list(filter(lambda x: self.generator[x] != 'water', self.generator))
+            castle_cell = random.choice(available_cells)
+            self.generator[castle_cell] = 'castle'
+
     def delete_pre_cells(self):
         for cell in self.generator:
             if self.generator[cell].startswith('pre'):
@@ -430,7 +438,10 @@ class Cell:
 
     def load_sprite(self):
         self.sprite = pygame.sprite.Sprite()
-        self.image = pygame.image.load(f'data/{self.region}{random.randint(1, 5)}.png')
+        if self.region == 'castle':
+            self.image = pygame.image.load(f'data/{self.region}{random.randint(1, 1)}.png')
+        else:
+            self.image = pygame.image.load(f'data/{self.region}{random.randint(1, 5)}.png')
         self.sprite.image = pygame.transform.scale(self.image,
                                                    (round(size * 3 ** 0.5), round(size * 2)))
         self.sprite.rect = self.sprite.image.get_rect()
