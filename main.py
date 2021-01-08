@@ -68,6 +68,8 @@ class Application:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_z:
                         self.zoom_to_original_position()
+                    if event.key == pygame.K_RETURN:
+                        board.end_turn()
             screen.fill(color_water)
             camera.update()
             sprites.draw(screen)
@@ -129,10 +131,19 @@ class Board:
         self.height = height
         self.cell_size = cell_size
         self.board = [[Cell(i, j) for j in range(self.width)] for i in range(self.height)]
-        self.units = [Unit((20, 20), self), Unit((21, 21), self)]
+        self.players = [Player(color='#FF0000'), Player(color='#0000FF')]
+        self.turn = 0
+        self.units = [Unit((20, 20), self, player=self.players[0]), Unit((21, 21), self, player=self.players[1])]
+        print(self.players[1].units is self.players[0].units)
         self.selected_unit = None
         self.clicked = ()
         self.generate_board()
+
+    def end_turn(self):
+        if self.turn == len(self.players) - 1:
+            self.turn = 0
+        else:
+            self.turn += 1
 
     def generate_board(self):
         board_generator = BoardGenerator(self)
@@ -201,12 +212,13 @@ class Board:
             self.on_click(cell)
 
     def on_click(self, cell_coords):
+        player = self.players[self.turn]
         self.clicked = cell_coords
         select = False
         if not self.selected_unit or int(
                 self.find_path(cell_coords, self.selected_unit.coords)) != 1:
-            for unit in self.units:
-                if unit.coords == cell_coords:
+            for unit in player.units:
+                if unit.coords == cell_coords and unit in player.units:
                     self.selected_unit = unit
                     select = True
         elif int(self.find_path(cell_coords, self.selected_unit.coords)) == 1:
@@ -424,6 +436,18 @@ class BoardGenerator:
             except Exception:
                 pass
 
+class Player:
+    def __init__(self, color='#FF0000', money=0, name='Игрок'):
+        self.color = color
+        self.units = []
+        self.money = money
+        self.name = name
+
+    def delete_unit(self, unit):
+        self.units = list(filter(lambda x: x != unit, self.units))
+
+    def add_unit(self, unit):
+        self.units.append(unit)
 
 class Cell:
     def __init__(self, col, row, region='plain'):
@@ -465,7 +489,7 @@ class Cell:
 
 class Unit:
     def __init__(self, coords, board, hp=20, speed=6, sprite='default',
-                 melee={'damage': 10, 'attacks': 1, 'mod': 0, 'type': 'melee'}, ranged=None):
+                 melee={'damage': 10, 'attacks': 1, 'mod': 0, 'type': 'melee'}, ranged=None, player=None):
         self.coords = coords
         self.board = board
         self.hp = hp
@@ -474,6 +498,9 @@ class Unit:
         self.ranged = ranged
         self.defence = 0.5
         self.load_sprite(sprite)
+        self.player = player
+        if self.player:
+            player.add_unit(self)
 
     def load_sprite(self, sprite):
         self.sprite = pygame.sprite.Sprite()
@@ -494,6 +521,8 @@ class Unit:
     def die(self):
         board.delete_unit(self)
         units.remove(self.sprite)
+        if self.player:
+            self.player.delete_unit(self)
 
     def melee_attack(self, attack, enemy):
         for i in range(attack['attacks']):
