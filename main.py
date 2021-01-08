@@ -158,8 +158,6 @@ class Board:
         for row in self.board:
             for cell in row:
                 cell.update()
-                pygame.draw.polygon(screen, color_water,
-                                    self.get_cell_vertices(*cell.coords), 1)
 
     def get_cell(self, mouse_pos):
         x, y = mouse_pos
@@ -441,9 +439,9 @@ class Cell:
         if self.region == 'castle':
             self.image = pygame.image.load(f'data/{self.region}{random.randint(1, 1)}.png')
         else:
-            self.image = pygame.image.load(f'data/{self.region}{random.randint(1, 5)}.png')
+            self.image = pygame.image.load(f'data/{self.region}{random.randint(1, 1)}.png')
         self.sprite.image = pygame.transform.scale(self.image,
-                                                   (round(size * 3 ** 0.5), round(size * 2)))
+                                                   (round(size * 3 ** 0.5) + 2, round(size * 2) + 2))
         self.sprite.rect = self.sprite.image.get_rect()
         pixel = offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0]
@@ -453,7 +451,7 @@ class Cell:
     def update(self):
         sprites.remove(self.sprite)
         self.sprite.image = pygame.transform.scale(self.image,
-                                                   (round(size * 3 ** 0.5), round(size * 2)))
+                                                   (round(size * 3 ** 0.5) + 2, round(size * 2) + 2))
         self.sprite.rect = self.sprite.image.get_rect()
         pixel = offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0] + camera.dx
