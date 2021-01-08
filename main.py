@@ -1,4 +1,6 @@
 import pygame
+import pygame.freetype
+import textwrap
 import random
 import sys
 from queue import PriorityQueue
@@ -14,6 +16,8 @@ color_village_clicked = (139, 101, 43)
 color_village_highlighted = (179, 149, 105)
 
 color_water = (115, 170, 220)
+
+color_font = (255, 255, 255)
 
 offset_directions = [
     [[+1, 0], [0, -1], [-1, -1],
@@ -49,6 +53,10 @@ def offset_to_pixel(col, row):
 
 
 class Application:
+    def __init__(self):
+        self.information_surface = None
+        self.information_coords = None
+
     def start(self):
         self.main()
 
@@ -61,20 +69,45 @@ class Application:
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:
                         board.get_click(event.pos)
+                        self.hide_information()
+                    if event.button == 3:
+                        self.show_information()
                     if event.button == 4:
                         self.zoom_in()
+                        self.hide_information()
                     if event.button == 5:
                         self.zoom_out()
+                        self.hide_information()
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_z:
                         self.zoom_to_original_position()
+                        self.hide_information()
             screen.fill(color_water)
             camera.update()
             sprites.draw(screen)
             board.render()
             units.draw(screen)
+            if self.information_surface:
+                screen.blit(self.information_surface, self.information_coords)
             pygame.display.flip()
             clock.tick(fps)
+
+    def show_information(self):
+        self.information_surface = pygame.Surface((200, 200))
+        self.information_surface.fill((0, 0, 0))
+        self.information_surface.set_alpha(200)
+        line = "Товарищи! постоянный количественный рост и сфера нашей активности требуют от нас " \
+               "анализа развития. Идейные соображения высшего порядка, а также постоянный рост"
+        line_width = 20
+        text = textwrap.fill(line, width=line_width).split('\n')
+        for i in range(len(text)):
+            information_font.render_to(self.information_surface, (10, 20 * i + 10),
+                                       text[i], color_font)
+        self.information_coords = pygame.mouse.get_pos()
+
+    def hide_information(self):
+        self.information_surface = None
+        self.information_coords = None
 
     @staticmethod
     def zoom_in():
@@ -437,11 +470,12 @@ class Cell:
     def load_sprite(self):
         self.sprite = pygame.sprite.Sprite()
         if self.region == 'castle':
-            self.image = pygame.image.load(f'data/{self.region}{random.randint(1, 1)}.png')
+            self.image = pygame.image.load(f'data/cells/{self.region}{random.randint(1, 1)}.png')
         else:
-            self.image = pygame.image.load(f'data/{self.region}{random.randint(1, 1)}.png')
+            self.image = pygame.image.load(f'data/cells/{self.region}{random.randint(1, 5)}.png')
         self.sprite.image = pygame.transform.scale(self.image,
-                                                   (round(size * 3 ** 0.5) + 2, round(size * 2) + 2))
+                                                   (
+                                                   round(size * 3 ** 0.5) + 2, round(size * 2) + 2))
         self.sprite.rect = self.sprite.image.get_rect()
         pixel = offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0]
@@ -451,7 +485,8 @@ class Cell:
     def update(self):
         sprites.remove(self.sprite)
         self.sprite.image = pygame.transform.scale(self.image,
-                                                   (round(size * 3 ** 0.5) + 2, round(size * 2) + 2))
+                                                   (
+                                                   round(size * 3 ** 0.5) + 2, round(size * 2) + 2))
         self.sprite.rect = self.sprite.image.get_rect()
         pixel = offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0] + camera.dx
@@ -477,7 +512,7 @@ class Unit:
 
     def load_sprite(self, sprite):
         self.sprite = pygame.sprite.Sprite()
-        self.image = pygame.image.load(f'{sprite}.png')
+        self.image = pygame.image.load(f'data/units/{sprite}.png')
         self.sprite.image = pygame.transform.scale(self.image, (int(size * 2), int(size * 2)))
         self.sprite.rect = self.sprite.image.get_rect()
         pixel = offset_to_pixel(*self.coords)
@@ -563,15 +598,19 @@ class Camera:
     def update(self):
         if self.mouse_is_on_the_left():
             self.move_camera_to_the_right()
+            app.hide_information()
 
         if self.mouse_is_on_the_right():
             self.move_camera_to_the_left()
+            app.hide_information()
 
         if self.mouse_is_at_the_bottom():
             self.move_camera_to_the_top()
+            app.hide_information()
 
         if self.mouse_is_at_the_top():
             self.move_camera_to_the_bottom()
+            app.hide_information()
 
     @staticmethod
     def mouse_is_on_the_left():
@@ -620,14 +659,17 @@ class Camera:
 
 if __name__ == '__main__':
     pygame.init()
+
     sprites = pygame.sprite.Group()
     units = pygame.sprite.Group()
+
     width = 30
     height = 30
     size = original_size = 15
     delta = original_delta = 4
     indent = 50
     board = Board(width, height, size)
+
     screen_size = screen_width, screen_height = round(width * size * 3 ** 0.5 + indent * 2), \
                                                 round(height * size * 1.5 + indent * 2)
     screen = pygame.display.set_mode(screen_size)
@@ -635,6 +677,8 @@ if __name__ == '__main__':
     fps = 60
     clock = pygame.time.Clock()
     camera = Camera()
+
+    information_font = pygame.freetype.Font('data/fonts/thintel.ttf', 24)
 
     app = Application()
     app.start()
