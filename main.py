@@ -45,7 +45,7 @@ def offset_to_cube(col, row):
 def offset_to_pixel(col, row):
     x = size * 3 ** 0.5 * (col + 0.5 * (row % 2))
     y = size * 3 / 2 * row
-    return int(x) + indent, int(y) + indent
+    return round(x) + horizontal_indent, round(y) + vertical_indent
 
 
 class Application:
@@ -68,6 +68,12 @@ class Application:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_z:
                         self.zoom_to_original_position()
+                if event.type == pygame.WINDOWRESIZED:
+                    self.resize()
+                if event.type == pygame.WINDOWENTER:
+                    camera.mouse_enter()
+                if event.type == pygame.WINDOWLEAVE:
+                    camera.mouse_leave()
             screen.fill(color_water)
             camera.update()
             sprites.draw(screen)
@@ -122,6 +128,15 @@ class Application:
         pygame.quit()
         sys.exit()
 
+    @staticmethod
+    def resize():
+        global horizontal_indent, vertical_indent
+        new_screen_size = pygame.display.get_surface().get_size()
+        new_screen_width, new_screen_height = new_screen_size
+        horizontal_indent = round((new_screen_width - board_width) / 2)
+        vertical_indent = round((new_screen_height - board_height) / 2)
+        board.update_units()
+
 
 class Board:
     def __init__(self, width, height, cell_size):
@@ -141,18 +156,18 @@ class Board:
     def get_cell_vertices(self, col, row):
         x = self.cell_size * 3 ** 0.5 * (col + 0.5 * (row % 2))
         y = self.cell_size * 1.5 * row
-        return (int(x + 3 ** 0.5 * self.cell_size / 2) + indent + camera.dx,
-                int(y) + indent + camera.dy), \
-               (int(x + 3 ** 0.5 * self.cell_size) + indent + camera.dx,
-                int(y + 0.5 * self.cell_size) + indent + camera.dy), \
-               (int(x + 3 ** 0.5 * self.cell_size) + indent + camera.dx,
-                int(y + 1.5 * self.cell_size) + indent + camera.dy), \
-               (int(x + 3 ** 0.5 * self.cell_size / 2) + indent + camera.dx,
-                int(y + 2 * self.cell_size) + indent + camera.dy), \
-               (int(x) + indent + camera.dx,
-                int(y + 1.5 * self.cell_size) + indent + camera.dy), \
-               (int(x) + indent + camera.dx,
-                int(y + 0.5 * self.cell_size) + indent + camera.dy)
+        return (round(x + 3 ** 0.5 * self.cell_size / 2) + horizontal_indent + camera.dx,
+                round(y) + vertical_indent + camera.dy), \
+               (round(x + 3 ** 0.5 * self.cell_size) + horizontal_indent + camera.dx,
+                round(y + 0.5 * self.cell_size) + vertical_indent + camera.dy), \
+               (round(x + 3 ** 0.5 * self.cell_size) + horizontal_indent + camera.dx,
+                round(y + 1.5 * self.cell_size) + vertical_indent + camera.dy), \
+               (round(x + 3 ** 0.5 * self.cell_size / 2) + horizontal_indent + camera.dx,
+                round(y + 2 * self.cell_size) + vertical_indent + camera.dy), \
+               (round(x) + horizontal_indent + camera.dx,
+                round(y + 1.5 * self.cell_size) + vertical_indent + camera.dy), \
+               (round(x) + horizontal_indent + camera.dx,
+                round(y + 0.5 * self.cell_size) + vertical_indent + camera.dy)
 
     def render(self):
         for row in self.board:
@@ -161,9 +176,9 @@ class Board:
 
     def get_cell(self, mouse_pos):
         x, y = mouse_pos
-        x -= indent
+        x -= horizontal_indent
         x -= camera.dx
-        y -= indent
+        y -= vertical_indent
         y -= camera.dy
         grid_height = self.cell_size * 1.5
         grid_width = self.cell_size * 3 ** 0.5
@@ -440,8 +455,8 @@ class Cell:
             self.image = pygame.image.load(f'data/{self.region}{random.randint(1, 1)}.png')
         else:
             self.image = pygame.image.load(f'data/{self.region}{random.randint(1, 1)}.png')
-        self.sprite.image = pygame.transform.scale(self.image,
-                                                   (round(size * 3 ** 0.5) + 2, round(size * 2) + 2))
+        self.sprite.image = pygame.transform.scale(
+            self.image, (round(size * 3 ** 0.5) + 2, round(size * 2) + 2))
         self.sprite.rect = self.sprite.image.get_rect()
         pixel = offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0]
@@ -450,8 +465,8 @@ class Cell:
 
     def update(self):
         sprites.remove(self.sprite)
-        self.sprite.image = pygame.transform.scale(self.image,
-                                                   (round(size * 3 ** 0.5) + 2, round(size * 2) + 2))
+        self.sprite.image = pygame.transform.scale(
+            self.image, (round(size * 3 ** 0.5) + 2, round(size * 2) + 2))
         self.sprite.rect = self.sprite.image.get_rect()
         pixel = offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0] + camera.dx
@@ -555,47 +570,48 @@ class Camera:
     def __init__(self):
         self.dx = 0
         self.dy = 0
+        self.mouse_is_in_the_app = False
 
     def apply(self, obj):
         obj.rect.x += self.dx
         obj.rect.y += self.dy
 
     def update(self):
-        if self.mouse_is_on_the_left():
+        if self.mouse_is_on_the_left() and self.mouse_is_in_the_app:
             self.move_camera_to_the_right()
 
-        if self.mouse_is_on_the_right():
+        if self.mouse_is_on_the_right() and self.mouse_is_in_the_app:
             self.move_camera_to_the_left()
 
-        if self.mouse_is_at_the_bottom():
+        if self.mouse_is_at_the_bottom() and self.mouse_is_in_the_app:
             self.move_camera_to_the_top()
 
-        if self.mouse_is_at_the_top():
+        if self.mouse_is_at_the_top() and self.mouse_is_in_the_app:
             self.move_camera_to_the_bottom()
 
     @staticmethod
     def mouse_is_on_the_left():
         x, y = pygame.mouse.get_pos()
-        return x <= screen_size[0] * 0.1 and x != 0 and y != 0 and \
-               x != screen_size[0] - 1 and y != screen_size[1] - 1
+        surface_size = pygame.display.get_surface().get_size()
+        return x <= surface_size[0] * 0.05
 
     @staticmethod
     def mouse_is_on_the_right():
         x, y = pygame.mouse.get_pos()
-        return x >= screen_size[0] * 0.9 and x != 0 and y != 0 and \
-               x != screen_size[0] - 1 and y != screen_size[1] - 1
+        surface_size = pygame.display.get_surface().get_size()
+        return x >= surface_size[0] * 0.95
 
     @staticmethod
     def mouse_is_at_the_bottom():
         x, y = pygame.mouse.get_pos()
-        return y <= screen_size[1] * 0.1 and x != 0 and y != 0 and \
-               x != screen_size[0] - 1 and y != screen_size[1] - 1
+        surface_size = pygame.display.get_surface().get_size()
+        return y <= surface_size[1] * 0.05
 
     @staticmethod
     def mouse_is_at_the_top():
         x, y = pygame.mouse.get_pos()
-        return y >= screen_size[1] * 0.9 and x != 0 and y != 0 and \
-               x != screen_size[0] - 1 and y != screen_size[1] - 1
+        surface_size = pygame.display.get_surface().get_size()
+        return y >= surface_size[1] * 0.95
 
     def move_camera_to_the_right(self):
         self.dx += delta
@@ -617,6 +633,12 @@ class Camera:
         board.move_units(0, -delta)
         board.move_cells(0, -delta)
 
+    def mouse_enter(self):
+        self.mouse_is_in_the_app = True
+
+    def mouse_leave(self):
+        self.mouse_is_in_the_app = False
+
 
 if __name__ == '__main__':
     pygame.init()
@@ -625,12 +647,16 @@ if __name__ == '__main__':
     width = 30
     height = 30
     size = original_size = 15
-    delta = original_delta = 4
-    indent = 50
+    delta = original_delta = 5
+    vertical_indent = horizontal_indent = 50
     board = Board(width, height, size)
-    screen_size = screen_width, screen_height = round(width * size * 3 ** 0.5 + indent * 2), \
-                                                round(height * size * 1.5 + indent * 2)
-    screen = pygame.display.set_mode(screen_size)
+    board_size = round(width * size * 3 ** 0.5), round(height * size * 1.5)
+    board_width, board_height = board_size
+
+    screen_size = round(width * size * 3 ** 0.5 + horizontal_indent * 2), \
+                  round(height * size * 1.5 + vertical_indent * 2)
+    screen_width, screen_height = screen_size
+    screen = pygame.display.set_mode(screen_size, pygame.RESIZABLE)
     screen.fill(color_water)
     fps = 60
     clock = pygame.time.Clock()
