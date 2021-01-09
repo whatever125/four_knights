@@ -35,14 +35,14 @@ def cube_to_offset(x, y, z):
     return col, row
 
 
-def offset_to_cube(col, row):
+def offset_to_cube(row, col):
     x = col - (row - (row % 2)) / 2
     z = row
     y = -x - z
     return x, y, z
 
 
-def offset_to_pixel(col, row):
+def offset_to_pixel(row, col):
     x = size * 3 ** 0.5 * (col + 0.5 * (row % 2))
     y = size * 3 / 2 * row
     return int(x) + indent, int(y) + indent
@@ -79,10 +79,10 @@ class Application:
                         board.end_turn()
             screen.fill(color_water)
             camera.update()
-            sprites.draw(screen)
             board.render()
+            sprites.draw(screen)
             units.draw(screen)
-            pygame.draw.rect(screen, (0, 0, 0), self.button_end_turn) # TODO изменить цвет, добавить надпись
+            pygame.draw.rect(screen, (0, 0, 0), self.button_end_turn)  # TODO изменить цвет, добавить надпись
             pygame.display.flip()
             clock.tick(fps)
 
@@ -141,8 +141,8 @@ class Board:
         self.board = [[Cell(i, j) for j in range(self.width)] for i in range(self.height)]
         self.players = [Player(color='#FF0000'), Player(color='#0000FF')]
         self.turn = 0
-        self.units = [Unit((20, 20), self, player=self.players[0]), Unit((21, 21), self, player=self.players[1])]
-        print(self.players[1].units is self.players[0].units)
+        self.units = [Unit((10, 10), self, player=self.players[0]),
+                      Unit((11, 11), self, player=self.players[1])]
         self.selected_unit = None
         self.clicked = ()
         self.generate_board()
@@ -157,7 +157,7 @@ class Board:
         board_generator = BoardGenerator(self)
         board_generator.generate()
 
-    def get_cell_vertices(self, col, row):
+    def get_cell_vertices(self, row, col):
         x = self.cell_size * 3 ** 0.5 * (col + 0.5 * (row % 2))
         y = self.cell_size * 1.5 * row
         return (int(x + 3 ** 0.5 * self.cell_size / 2) + indent + camera.dx,
@@ -211,7 +211,7 @@ class Board:
             if row_is_odd:
                 column += 1
 
-        return int(column), int(row)
+        return round(row), round(column)
 
     def get_click(self, mouse_pos):
         cell = self.get_cell(mouse_pos)
@@ -225,21 +225,27 @@ class Board:
         select = False
         if not self.selected_unit or int(
                 self.find_path(cell_coords, self.selected_unit.coords)) != 1:
+            board.make_cells_available()
             for unit in player.units:
                 if unit.coords == cell_coords and unit in player.units:
                     self.selected_unit = unit
                     select = True
+                    board.make_cells_unavailable()
+                    available_cells = board.cells_available_from(board.board[cell_coords[0]][cell_coords[1]], unit.speed)
+                    board.make_cells_available(*available_cells)
         elif int(self.find_path(cell_coords, self.selected_unit.coords)) == 1:
             for unit in self.units:
                 if unit.coords == cell_coords:
+                    board.make_cells_available()
                     self.selected_unit.melee_attack(self.selected_unit.melee, unit)
                     self.selected_unit = None
                     self.clicked = None
                     return
-        if self.board[cell_coords[1]][cell_coords[0]].region == 'water':
+        if self.board[cell_coords[0]][cell_coords[1]].region == 'water':
             self.selected_unit = None
         elif not select and self.selected_unit and \
                 self.find_path(self.selected_unit.coords, cell_coords) <= self.selected_unit.speed:
+            board.make_cells_available()
             self.selected_unit.move_to(*cell_coords)
             self.selected_unit = None
             self.clicked = None
@@ -255,7 +261,7 @@ class Board:
             current = frontier.get().item
             if current == goal:
                 return cost_so_far[current]
-            neighbors = filter(lambda x: self.board[x[1]][x[0]].region != 'water',
+            neighbors = filter(lambda x: self.board[x[0]][x[1]].region != 'water',
                                [offset_neighbor(*current, i) for i in range(6)])
             for next in neighbors:
                 new_cost = cost_so_far[current] + self.distance(current, next)
@@ -271,6 +277,28 @@ class Board:
                 + abs(a[0] + a[1] - b[0] - b[1])
                 + abs(a[1] - b[1])) / 2
 
+    def cells_available_from(self, start, movement):
+        visited = set()
+        visited.add(start)
+        fringes = [[start]]
+
+        for i in range(1, movement + 1):
+            fringes.append([])
+            for cell in fringes[i - 1]:
+                for direction in range(6):
+                    try:
+                        neighbor_row, neighbor_col = offset_neighbor(cell.row, cell.col, direction)
+                        neighbor = self.board[neighbor_row][neighbor_col]
+                        if neighbor not in visited and neighbor.region != 'water':
+                            visited.add(neighbor)
+                            fringes[i].append(neighbor)
+                    except IndexError:
+                        pass
+                    except Exception as e:
+                        print(e)
+
+        return visited
+
     def update_cell_size(self):
         self.cell_size = size
 
@@ -281,6 +309,24 @@ class Board:
         for row in self.board:
             for cell in row:
                 cell.update()
+
+    def make_cells_available(self, *cells):
+        if cells:
+            for cell in cells:
+                cell.available = True
+        else:
+            for row in self.board:
+                for cell in row:
+                    cell.available = True
+
+    def make_cells_unavailable(self, *cells):
+        if cells:
+            for cell in cells:
+                cell.available = False
+        else:
+            for row in self.board:
+                for cell in row:
+                    cell.available = False
 
     def move_cells(self, dx, dy):
         for row in self.board:
@@ -310,7 +356,7 @@ class BoardGenerator:
         self.max_region_cells = round(self.number_of_earth_cells * 0.25)
         self.number_of_villages = round((self.width * self.height) / 100)
         self.number_of_castles = 2  # TODO Изменение количества замков
-        self.region_chance = 40
+        self.region_chance = 100
 
         self.generator = {(i, j): 'water' for i in range(self.height) for j in range(self.width)}
 
@@ -325,20 +371,20 @@ class BoardGenerator:
         self.update_cells()
 
     def generate_board(self):
-        mid_x = self.height // 2 - 1
-        mid_y = self.width // 2 - 1
-        mid_cell = mid_x, mid_y
+        mid_row = self.height // 2 - 1
+        mid_col = self.width // 2 - 1
+        mid_cell = mid_row, mid_col
         self.generator[mid_cell] = 'plain'
         self.update_neighbours(mid_cell, 100, 'water', 'pre_plain')
         for _ in range(self.number_of_earth_cells):
-            neighbours = list(filter(lambda x: self.generator[x] == 'pre_plain', self.generator))
+            neighbours = list(filter(lambda cell: self.generator[cell] == 'pre_plain', self.generator))
             neighbour = random.choice(neighbours)
             self.generator[neighbour] = 'plain'
             self.update_neighbours(neighbour, 40, 'water', 'pre_plain')
         self.delete_pre_cells()
 
     def generate_forest(self):
-        available_cells = list(filter(lambda x: self.generator[x] == 'plain', self.generator))
+        available_cells = list(filter(lambda cell: self.generator[cell] == 'plain', self.generator))
         first_cell = random.choice(available_cells)
         self.generator[first_cell] = 'forest'
         self.update_neighbours(first_cell, 100, 'plain', 'pre_forest')
@@ -346,7 +392,7 @@ class BoardGenerator:
         for _ in range(number_of_forest_cells):
             try:
                 available_cells = list(
-                    filter(lambda x: self.generator[x] == 'pre_forest', self.generator))
+                    filter(lambda cell: self.generator[cell] == 'pre_forest', self.generator))
                 forest_cell = random.choice(available_cells)
                 self.generator[forest_cell] = 'forest'
                 self.update_neighbours(forest_cell, self.region_chance, 'plain', 'pre_forest')
@@ -355,7 +401,7 @@ class BoardGenerator:
         self.delete_pre_cells()
 
     def generate_desert(self):
-        available_cells = list(filter(lambda x: self.generator[x] == 'plain', self.generator))
+        available_cells = list(filter(lambda cell: self.generator[cell] == 'plain', self.generator))
         first_cell = random.choice(available_cells)
         self.generator[first_cell] = 'desert'
         self.update_neighbours(first_cell, 100, 'plain', 'pre_desert')
@@ -363,7 +409,7 @@ class BoardGenerator:
         for _ in range(number_of_desert_cells):
             try:
                 available_cells = list(
-                    filter(lambda x: self.generator[x] == 'pre_desert', self.generator))
+                    filter(lambda cell: self.generator[cell] == 'pre_desert', self.generator))
                 forest_cell = random.choice(available_cells)
                 self.generator[forest_cell] = 'desert'
                 self.update_neighbours(forest_cell, self.region_chance, 'plain', 'pre_desert')
@@ -372,7 +418,7 @@ class BoardGenerator:
         self.delete_pre_cells()
 
     def generate_mountain(self):
-        available_cells = list(filter(lambda x: self.generator[x] == 'plain', self.generator))
+        available_cells = list(filter(lambda cell: self.generator[cell] == 'plain', self.generator))
         first_cell = random.choice(available_cells)
         self.generator[first_cell] = 'mountains'
         self.update_neighbours(first_cell, 100, 'plain', 'pre_mountain')
@@ -380,7 +426,7 @@ class BoardGenerator:
         for _ in range(number_of_mountain_cells):
             try:
                 available_cells = list(
-                    filter(lambda x: self.generator[x] == 'pre_mountain', self.generator))
+                    filter(lambda cell: self.generator[cell] == 'pre_mountain', self.generator))
                 forest_cell = random.choice(available_cells)
                 self.generator[forest_cell] = 'mountains'
                 self.update_neighbours(forest_cell, self.region_chance, 'plain', 'pre_mountain')
@@ -389,7 +435,7 @@ class BoardGenerator:
         self.delete_pre_cells()
 
     def generate_swamp(self):
-        available_cells = list(filter(lambda x: self.generator[x] == 'plain', self.generator))
+        available_cells = list(filter(lambda cell: self.generator[cell] == 'plain', self.generator))
         first_cell = random.choice(available_cells)
         self.generator[first_cell] = 'swamp'
         self.update_neighbours(first_cell, 100, 'plain', 'pre_swamp')
@@ -397,7 +443,7 @@ class BoardGenerator:
         for _ in range(number_of_swamp_cells):
             try:
                 available_cells = list(
-                    filter(lambda x: self.generator[x] == 'pre_swamp', self.generator))
+                    filter(lambda cell: self.generator[cell] == 'pre_swamp', self.generator))
                 forest_cell = random.choice(available_cells)
                 self.generator[forest_cell] = 'swamp'
                 self.update_neighbours(forest_cell, self.region_chance, 'plain', 'pre_swamp')
@@ -407,13 +453,13 @@ class BoardGenerator:
 
     def generate_villages(self):
         for _ in range(self.number_of_villages):
-            available_cells = list(filter(lambda x: self.generator[x] != 'water', self.generator))
+            available_cells = list(filter(lambda cell: self.generator[cell] != 'water', self.generator))
             village_cell = random.choice(available_cells)
             self.generator[village_cell] = 'village'
 
     def generate_castles(self):
         for _ in range(self.number_of_castles):
-            available_cells = list(filter(lambda x: self.generator[x] != 'water', self.generator))
+            available_cells = list(filter(lambda cell: self.generator[cell] != 'water', self.generator))
             castle_cell = random.choice(available_cells)
             self.generator[castle_cell] = 'castle'
 
@@ -444,6 +490,7 @@ class BoardGenerator:
             except Exception:
                 pass
 
+
 class Player:
     def __init__(self, color='#FF0000', money=0, name='Игрок'):
         self.color = color
@@ -457,23 +504,29 @@ class Player:
     def add_unit(self, unit):
         self.units.append(unit)
 
+
 class Cell:
-    def __init__(self, col, row, region='plain'):
+    def __init__(self, row, col, region='plain'):
         self.region = region
         self.col = col
         self.row = row
         self.coords = (row, col)
-        self.cube = offset_to_cube(col, row)
+        self.cube = offset_to_cube(row, col)
         self.x, self.y, self.z = self.cube
+        self.num = random.randint(1, 5)
+        self.available = True
 
     def load_sprite(self):
         self.sprite = pygame.sprite.Sprite()
         if self.region == 'castle':
-            self.image = pygame.image.load(f'data/{self.region}{random.randint(1, 1)}.png')
+            # TODO несколько замков
+            self.image_available = pygame.image.load(f'data/{self.region}{1}.png')
+            self.image_unavailable = pygame.image.load(f'data/{self.region}{1}_unavailable.png')
         else:
-            self.image = pygame.image.load(f'data/{self.region}{random.randint(1, 1)}.png')
-        self.sprite.image = pygame.transform.scale(self.image,
-                                                   (round(size * 3 ** 0.5) + 2, round(size * 2) + 2))
+            self.image_available = pygame.image.load(f'data/{self.region}{self.num}.png')
+            self.image_unavailable = pygame.image.load(f'data/{self.region}{self.num}_unavailable.png')
+        self.sprite.image = pygame.transform.scale(
+            self.image_available, (round(size * 3 ** 0.5) + 2, round(size * 2) + 2))
         self.sprite.rect = self.sprite.image.get_rect()
         pixel = offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0]
@@ -482,8 +535,12 @@ class Cell:
 
     def update(self):
         sprites.remove(self.sprite)
-        self.sprite.image = pygame.transform.scale(self.image,
-                                                   (round(size * 3 ** 0.5) + 2, round(size * 2) + 2))
+        if self.available:
+            self.sprite.image = pygame.transform.scale(
+                self.image_available, (round(size * 3 ** 0.5) + 2, round(size * 2) + 2))
+        else:
+            self.sprite.image = pygame.transform.scale(
+                self.image_unavailable, (round(size * 3 ** 0.5) + 2, round(size * 2) + 2))
         self.sprite.rect = self.sprite.image.get_rect()
         pixel = offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0] + camera.dx
@@ -497,7 +554,8 @@ class Cell:
 
 class Unit:
     def __init__(self, coords, board, hp=20, speed=6, sprite='default',
-                 melee={'damage': 10, 'attacks': 1, 'mod': 0, 'type': 'melee'}, ranged=None, player=None):
+                 melee={'damage': 10, 'attacks': 1, 'mod': 0, 'type': 'melee'}, ranged=None,
+                 player=None):
         self.coords = coords
         self.board = board
         self.hp = hp
