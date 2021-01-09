@@ -49,6 +49,9 @@ def offset_to_pixel(col, row):
 
 
 class Application:
+    def __init__(self):
+        self.button_end_turn = pygame.Rect(600, 600, 100, 30)  # TODO изменить положение кнопки
+
     def start(self):
         self.main()
 
@@ -60,7 +63,11 @@ class Application:
                     return
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:
-                        board.get_click(event.pos)
+                        mouse_pos = event.pos
+                        if self.button_end_turn.collidepoint(mouse_pos):
+                            board.end_turn()
+                        else:
+                            board.get_click(event.pos)
                     if event.button == 4:
                         self.zoom_in()
                     if event.button == 5:
@@ -75,6 +82,7 @@ class Application:
             sprites.draw(screen)
             board.render()
             units.draw(screen)
+            pygame.draw.rect(screen, (0, 0, 0), self.button_end_turn) # TODO изменить цвет, добавить надпись
             pygame.display.flip()
             clock.tick(fps)
 
