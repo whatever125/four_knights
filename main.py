@@ -504,7 +504,7 @@ class BoardGenerator:
 
 
 class Player:
-    def __init__(self, color='#FF0000', money=0, name='Игрок'):
+    def __init__(self, color='red', money=100, name='Игрок'):
         self.color = color
         self.units = []
         self.money = money
@@ -527,6 +527,8 @@ class Cell:
         self.x, self.y, self.z = self.cube
         self.num = random.randint(1, 5)
         self.available = True
+        self.captured = False
+        self.player_color = None #какой игрок захватил клетку(если деревня или замок)
 
     def load_sprite(self):
         self.sprite = pygame.sprite.Sprite()
@@ -566,16 +568,19 @@ class Cell:
 
 
 class Unit:
-    def __init__(self, coords, board, hp=20, speed=6, sprite='default',
+    def __init__(self, coords, board, hp=20, speed=6, cost=15, sprite='default', name='Рыцарь',
                  melee={'damage': 10, 'attacks': 1, 'mod': 0, 'type': 'melee'}, ranged=None,
                  player=None):
         self.coords = coords
         self.board = board
         self.hp = hp
         self.speed = speed
+        self.cost = cost
+        self.name = name
         self.melee = melee
         self.ranged = ranged
         self.defence = 0.5
+        self.sprite_name = sprite
         self.load_sprite(sprite)
         self.player = player
         if self.player:
@@ -596,6 +601,9 @@ class Unit:
         pixel = offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0] + camera.dx
         self.sprite.rect.y = pixel[1] + camera.dy
+        if not self.board.board[x][y].captured:
+            self.board.board[x][y].captured = True
+            self.board.board[x][y].player_color = self.player.color
 
     def die(self):
         board.delete_unit(self)
@@ -637,6 +645,22 @@ class Unit:
 
     def take_damage(self, damage):
         self.hp -= damage
+
+    def return_information(self):
+        if not self.melee:
+            melee = '-'
+        else:
+            melee = f'{self.melee["attacks"]}x{self.melee["damage"]}'
+        if not self.ranged:
+            ranged = '-'
+        else:
+            ranged = f'{self.ranged["attacks"]}x{self.ranged["damage"]}'
+        return {'name': self.name,
+                'sprite': self.sprite_name,
+                'hp': self.hp,
+                'cost': self.cost,
+                'speed': self.speed,
+                'attacks': (melee, ranged)}
 
     def update(self):
         units.remove(self.sprite)
