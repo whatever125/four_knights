@@ -1,19 +1,52 @@
 import pygame
+import pygame.freetype
 import random
 import sys
 from queue import PriorityQueue
 from dataclasses import dataclass, field
 from typing import Any
 
-color_earth = (61, 152, 72)
-color_earth_clicked = (38, 124, 48)
-color_earth_highlighted = (92, 172, 101)
-
-color_village = (166, 127, 67)
-color_village_clicked = (139, 101, 43)
-color_village_highlighted = (179, 149, 105)
-
 color_water = (115, 170, 220)
+color_font = (255, 255, 255)
+
+all_units = [
+    {'name': 'Рыцарь',
+     'sprite': 'default',
+     'hp': 20,
+     'cost': 15,
+     'speed': 6,
+     'attacks': ('1x10', '-')},
+    {'name': 'Тяжелый пехотинец',
+     'sprite': 'heavyinfantry',
+     'hp': 30,
+     'cost': 20,
+     'speed': 4,
+     'attacks': (r'2x6', '-')},
+    {'name': 'Драгун',
+     'sprite': 'dragoon',
+     'hp': 25,
+     'cost': 25,
+     'speed': 9,
+     'attacks': ('2x4', '1x12')},
+    {'name': 'Лучник',
+     'sprite': 'bowman',
+     'hp': 15,
+     'cost': 15,
+     'speed': 7,
+     'attacks': ('1x4', '2x8')},
+    {'name': 'Всадник',
+     'sprite': 'horseman',
+     'hp': 25,
+     'cost': 25,
+     'speed': 9,
+     'attacks': ('2x8', '-')},
+    {'name': 'Копейщик',
+     'sprite': 'pikeman',
+     'hp': 25,
+     'cost': 15,
+     'speed': 7,
+     'attacks': ('1x18', '1x5')}
+]
 
 offset_directions = [
     [[+1, 0], [0, -1], [-1, -1],
@@ -51,6 +84,8 @@ def offset_to_pixel(row, col):
 class Application:
     def __init__(self):
         self.button_end_turn = pygame.Rect(600, 600, 100, 30)  # TODO изменить положение кнопки
+        self.rent_unit_surface = None
+        self.rent_unit_coords = None
 
     def start(self):
         self.main()
@@ -65,18 +100,30 @@ class Application:
                     if event.button == 1:
                         mouse_pos = event.pos
                         if self.button_end_turn.collidepoint(mouse_pos):
-                            board.end_turn()
+                            self.end_turn()
+                            self.hide_information()
+                        elif self.rent_unit_surface and pygame.Rect(*self.rent_unit_coords, 600,
+                                                                    600).collidepoint(mouse_pos):
+                            self.rent_unit(mouse_pos)
+                            self.hide_information()
                         else:
                             board.get_click(event.pos)
+                            self.hide_information()
+                    if event.button == 3 and board.is_castle(event.pos):
+                        self.show_rent_unit()
                     if event.button == 4:
                         self.zoom_in()
+                        self.hide_information()
                     if event.button == 5:
                         self.zoom_out()
+                        self.hide_information()
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_z:
                         self.zoom_to_original_position()
+                        self.hide_information()
                     if event.key == pygame.K_RETURN:
-                        board.end_turn()
+                        self.end_turn()
+                        self.hide_information()
             screen.fill(color_water)
             camera.update()
             board.render()
@@ -84,8 +131,48 @@ class Application:
             units.draw(screen)
             pygame.draw.rect(screen, (0, 0, 0),
                              self.button_end_turn)  # TODO изменить цвет, добавить надпись
+            if self.rent_unit_surface:
+                screen.blit(self.rent_unit_surface, self.rent_unit_coords)
             pygame.display.flip()
             clock.tick(fps)
+
+    def show_rent_unit(self):
+        self.rent_unit_surface = pygame.Surface((600, 600))
+        self.rent_unit_surface.fill((0, 0, 0))
+        self.rent_unit_surface.set_alpha(210)
+        display_width, display_height = pygame.display.get_surface().get_size()
+        self.rent_unit_coords = (display_width - 600) // 2, (display_height - 600) // 2
+        for i in range(len(all_units)):
+            lines = []
+            for inf in all_units[i]:
+                line = inf
+                line += ': '
+                line += str(all_units[i][inf])
+                lines.append(line)
+            for j in range(len(lines)):
+                information_font.render_to(self.rent_unit_surface,
+                                           (200 * (i % 3) + 20, 300 * (i // 3) + 20 * j + 160),
+                                           lines[j], color_font)
+            unit_image = pygame.image.load(f'data/units/{all_units[i]["sprite"]}.png')
+            unit_image = pygame.transform.scale(unit_image, (160, 160))
+            unit_rect = unit_image.get_rect(topleft=(200 * (i % 3) + 20, 300 * (i // 3) + 10))
+            self.rent_unit_surface.blit(unit_image, unit_rect)
+
+    def rent_unit(self, mouse_pos):
+        x, y = mouse_pos
+        x -= self.rent_unit_coords[0]
+        y -= self.rent_unit_coords[1]
+        unit_num = x // 200 + 3 * (y // 300)
+        unit_name = all_units[unit_num]['name']
+        print(unit_name)
+        player = players[turn]
+        print(player.name)
+        print()
+        # TODO добавить юниа к игроку
+
+    def hide_information(self):
+        self.rent_unit_surface = None
+        self.rent_unit_coords = None
 
     @staticmethod
     def zoom_in():
@@ -129,6 +216,15 @@ class Application:
         board.update_cells()
 
     @staticmethod
+    def end_turn():
+        global turn
+        board.make_cells_available()
+        if turn == len(players) - 1:
+            turn = 0
+        else:
+            turn += 1
+
+    @staticmethod
     def terminate():
         pygame.quit()
         sys.exit()
@@ -140,20 +236,11 @@ class Board:
         self.height = height
         self.cell_size = cell_size
         self.board = [[Cell(i, j) for j in range(self.width)] for i in range(self.height)]
-        self.players = [Player(color='#FF0000'), Player(color='#0000FF')]
-        self.turn = 0
-        self.units = [Unit((10, 10), self, player=self.players[0]),
-                      Unit((11, 11), self, player=self.players[1]),
-                      Unit((15, 15), self, player=self.players[0])]
+        self.units = [Unit((10, 10), self, player=players[0]),
+                      Unit((11, 11), self, player=players[1]),
+                      Unit((15, 15), self, player=players[0])]
         self.selected_unit = None
         self.generate_board()
-
-    def end_turn(self):
-        self.make_cells_available()
-        if self.turn == len(self.players) - 1:
-            self.turn = 0
-        else:
-            self.turn += 1
 
     def generate_board(self):
         board_generator = BoardGenerator(self)
@@ -223,7 +310,7 @@ class Board:
 
     def on_click(self, clicked_cell):
         clicked_row, clicked_col = clicked_cell
-        player = self.players[self.turn]
+        player = players[turn]
         just_selected = False
         if self.selected_unit and self.distance(self.selected_unit.coords, clicked_cell) == 0:
             self.selected_unit = None
@@ -254,7 +341,8 @@ class Board:
             self.make_cells_available()
         elif not just_selected and self.selected_unit and self.board[clicked_row][clicked_col] \
                 in self.cells_available_from(self.board[self.selected_unit.coords[0]][
-                                                 self.selected_unit.coords[1]], self.selected_unit.speed):
+                                                 self.selected_unit.coords[1]],
+                                             self.selected_unit.speed):
             self.make_cells_available()
             self.selected_unit.move_to(*clicked_cell)
             self.selected_unit = None
@@ -307,6 +395,17 @@ class Board:
                         print(e)
 
         return visited
+
+    def is_castle(self, mouse_pos):
+        row, col = self.get_cell(mouse_pos)
+        return self.board[row][col].region == 'castle'
+
+    def is_unit(self, mouse_pos):
+        cell = self.get_cell(mouse_pos)
+        for unit in self.units:
+            if unit.coords == cell:
+                return True
+        return False
 
     def update_cell_size(self):
         self.cell_size = size
@@ -528,7 +627,7 @@ class Cell:
         self.num = random.randint(1, 5)
         self.available = True
         self.captured = False
-        self.player_color = None #какой игрок захватил клетку(если деревня или замок)
+        self.player_color = None  # какой игрок захватил клетку(если деревня или замок)
 
     def load_sprite(self):
         self.sprite = pygame.sprite.Sprite()
@@ -588,7 +687,7 @@ class Unit:
 
     def load_sprite(self, sprite):
         self.sprite = pygame.sprite.Sprite()
-        self.image = pygame.image.load(f'{sprite}.png')
+        self.image = pygame.image.load(f'data/units/{sprite}.png')
         self.sprite.image = pygame.transform.scale(self.image, (int(size * 2), int(size * 2)))
         self.sprite.rect = self.sprite.image.get_rect()
         pixel = offset_to_pixel(*self.coords)
@@ -695,15 +794,19 @@ class Camera:
     def update(self):
         if self.mouse_is_on_the_left():
             self.move_camera_to_the_right()
+            app.hide_information()
 
         if self.mouse_is_on_the_right():
             self.move_camera_to_the_left()
+            app.hide_information()
 
         if self.mouse_is_at_the_bottom():
             self.move_camera_to_the_top()
+            app.hide_information()
 
         if self.mouse_is_at_the_top():
             self.move_camera_to_the_bottom()
+            app.hide_information()
 
     @staticmethod
     def mouse_is_on_the_left():
@@ -759,6 +862,10 @@ if __name__ == '__main__':
     size = original_size = 15
     delta = original_delta = 4
     indent = 50
+
+    players = [Player(color='#FF0000'), Player(color='#0000FF')]
+    turn = 0
+
     board = Board(width, height, size)
     screen_size = screen_width, screen_height = round(width * size * 3 ** 0.5 + indent * 2), \
                                                 round(height * size * 1.5 + indent * 2)
@@ -767,6 +874,8 @@ if __name__ == '__main__':
     fps = 60
     clock = pygame.time.Clock()
     camera = Camera()
+
+    information_font = pygame.freetype.Font('data/fonts/thintel.ttf', 24)
 
     app = Application()
     app.start()
