@@ -49,9 +49,9 @@ all_units = [
 ]
 
 offset_directions = [
-    [[-1, -1], [0, -1], [+1, 0], 
+    [[-1, -1], [0, -1], [+1, 0],
      [0, +1], [-1, +1], [-1, 0]],
-    [[0, -1], [+1, -1], [+1, 0], 
+    [[0, -1], [+1, -1], [+1, 0],
      [+1, +1], [0, +1], [-1, 0]]
 ]
 
@@ -91,7 +91,7 @@ class Application:
         self.main()
 
     def main(self):
-        while True:
+        while len(players) > 1:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.terminate()
@@ -177,9 +177,13 @@ class Application:
             if not f and player.money >= int(unit['cost']):
                 melee = unit['attacks'][0].split('x')
                 ranged = unit['attacks'][0].split('x')
-                unit = Unit(i, board, name=unit['name'], cost=unit['cost'], sprite=unit['sprite'], hp=unit['hp'],
-                            speed=unit['speed'], player=player, melee={'type': 'melee', 'attacks': int(melee[0]), 'damage': int(melee[1]), 'mod': 0},
-                            ranged={'type': 'ranged', 'attacks': int(ranged[0]), 'damage': int(ranged[1]), 'mod': 0})
+                unit = Unit(i, board, name=unit['name'], cost=unit['cost'], sprite=unit['sprite'],
+                            hp=unit['hp'],
+                            speed=unit['speed'], player=player,
+                            melee={'type': 'melee', 'attacks': int(melee[0]),
+                                   'damage': int(melee[1]), 'mod': 0},
+                            ranged={'type': 'ranged', 'attacks': int(ranged[0]),
+                                    'damage': int(ranged[1]), 'mod': 0})
                 player.add_unit(unit)
                 board.units.append(unit)
                 board.update_units()
@@ -236,11 +240,16 @@ class Application:
     def end_turn():
         global turn
         board.make_cells_available()
+        if not players[turn].units and not players[turn].castles:
+            del players[turn]
+            if turn > 0:
+                turn -= 1
         if turn == len(players) - 1:
             turn = 0
         else:
             turn += 1
-        players[turn].money += (players[turn].income + len(players[turn].villages) - len(players[turn].units))
+        players[turn].money += (
+                    players[turn].income + len(players[turn].villages) - len(players[turn].units))
 
     @staticmethod
     def terminate():
@@ -254,11 +263,17 @@ class Board:
         self.height = height
         self.cell_size = cell_size
         self.board = [[Cell(i, j) for j in range(self.width)] for i in range(self.height)]
-        self.units = [Unit((10, 10), self, player=players[0]),
-                      Unit((11, 11), self, player=players[1]),
-                      Unit((15, 15), self, player=players[0])]
         self.selected_unit = None
         self.generate_board()
+        self.units = [
+            Unit(players[0].castles[0].coords, self, player=players[0], name='Герменита',
+                 sprite='nita', hp=50, speed=6,
+                 cost=0, melee={'damage': 5, 'attacks': 4, 'mod': 10, 'type': 'melee'},
+                 ranged={'damage': 10, 'attacks': 1, 'mod': 0, 'type': 'ranged'}),
+            Unit(players[1].castles[0].coords, self, player=players[1], name='Афина', sprite='nana',
+                 hp=30, speed=7,
+                 cost=0, melee={'damage': 5, 'attacks': 1, 'mod': 0, 'type': 'melee'},
+                 ranged={'damage': 15, 'attacks': 2, 'mod': 10, 'type': 'ranged'})]
 
     def generate_board(self):
         board_generator = BoardGenerator(self)
@@ -425,7 +440,7 @@ class Board:
     def is_players_castle(self, mouse_pos):
         row, col = self.get_cell(mouse_pos)
         return self.board[row][col].region == 'castle' and \
-            self.board[row][col].player == players[turn]
+               self.board[row][col].player == players[turn]
 
     def is_unit(self, mouse_pos):
         cell = self.get_cell(mouse_pos)
@@ -601,6 +616,7 @@ class BoardGenerator:
             self.generator[castle_cell] = 'castle'
             self.update_neighbours(castle_cell, 100, 'water', 'plain')
             self.board.board[castle_cell[0]][castle_cell[1]].player = player
+            player.castles.append(self.board.board[castle_cell[0]][castle_cell[1]])
 
     def delete_pre_cells(self):
         for cell in self.generator:
@@ -635,6 +651,7 @@ class Player:
         self.color = color
         self.units = []
         self.villages = []
+        self.castles = []
         self.money = money
         self.name = name
         self.income = income
@@ -647,6 +664,9 @@ class Player:
 
     def delete_village(self, village):
         self.villages = list(filter(lambda x: x != village, self.villages))
+
+    def delete_castle(self, castle):
+        self.castles = list(filter(lambda x: x != castle, self.castles))
 
 
 class Cell:
@@ -735,15 +755,22 @@ class Unit:
         pixel = offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0] + camera.dx
         self.sprite.rect.y = pixel[1] + camera.dy
-        if not self.board.board[x][y].captured:
+        if (not self.board.board[x][y].captured) and (self.board.board[x][y].region == 'village'):
             self.board.board[x][y].captured = True
             self.player.villages.append(board.board[x][y])
             self.board.board[x][y].player_color = self.player.color
             self.board.board[x][y].player = self.player
-        else:
+        elif (self.board.board[x][y].captured) and (self.board.board[x][y].region == 'village'):
             self.board.board[x][y].player_color = self.player.color
             self.board.board[x][y].player.delete_village(board.board[x][y])
             self.player.villages.append(board.board[x][y])
+        elif board.board[x][y].region == 'castle':
+            self.board.board[x][y].player_color = self.player.color
+            self.board.board[x][y].player.delete_castle(board.board[x][y])
+            self.board.board[x][y].player = self.player
+            self.player.castles.append(board.board[x][y])
+            board.board[x][y].load_sprite()
+
 
     def die(self):
         board.delete_unit(self)
