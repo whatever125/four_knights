@@ -174,15 +174,16 @@ class Application:
             for j in board.units:
                 if j.coords == i:
                     f = True
-            if not f:
+            if not f and player.money >= int(unit['cost']):
                 melee = unit['attacks'][0].split('x')
                 ranged = unit['attacks'][0].split('x')
-                unit = Unit(i, board, name=unit['name'], sprite=unit['sprite'], hp=unit['hp'],
+                unit = Unit(i, board, name=unit['name'], cost=unit['cost'], sprite=unit['sprite'], hp=unit['hp'],
                             speed=unit['speed'], player=player, melee={'type': 'melee', 'attacks': int(melee[0]), 'damage': int(melee[1]), 'mod': 0},
                             ranged={'type': 'ranged', 'attacks': int(ranged[0]), 'damage': int(ranged[1]), 'mod': 0})
                 player.add_unit(unit)
                 board.units.append(unit)
                 board.update_units()
+                player.money -= int(unit.cost)
                 break
 
     def hide_information(self):
@@ -239,6 +240,7 @@ class Application:
             turn = 0
         else:
             turn += 1
+        players[turn].money += (players[turn].income + len(players[turn].villages) - len(players[turn].units))
 
     @staticmethod
     def terminate():
@@ -629,17 +631,22 @@ class BoardGenerator:
 
 
 class Player:
-    def __init__(self, color='red', money=100, name='Игрок'):
+    def __init__(self, color='red', money=100, income=5, name='Игрок'):
         self.color = color
         self.units = []
+        self.villages = []
         self.money = money
         self.name = name
+        self.income = income
 
     def delete_unit(self, unit):
         self.units = list(filter(lambda x: x != unit, self.units))
 
     def add_unit(self, unit):
         self.units.append(unit)
+
+    def delete_village(self, village):
+        self.villages = list(filter(lambda x: x != village, self.villages))
 
 
 class Cell:
@@ -653,7 +660,8 @@ class Cell:
         self.num = random.randint(1, 5)
         self.available = True
         self.captured = False
-        self.player = player
+        self.player = None
+        self.player_color = None
 
     def load_sprite(self):
         self.sprite = pygame.sprite.Sprite()
@@ -729,7 +737,13 @@ class Unit:
         self.sprite.rect.y = pixel[1] + camera.dy
         if not self.board.board[x][y].captured:
             self.board.board[x][y].captured = True
+            self.player.villages.append(board.board[x][y])
             self.board.board[x][y].player_color = self.player.color
+            self.board.board[x][y].player = self.player
+        else:
+            self.board.board[x][y].player_color = self.player.color
+            self.board.board[x][y].player.delete_village(board.board[x][y])
+            self.player.villages.append(board.board[x][y])
 
     def die(self):
         board.delete_unit(self)
