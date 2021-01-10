@@ -49,10 +49,10 @@ all_units = [
 ]
 
 offset_directions = [
-    [[+1, 0], [0, -1], [-1, -1],
-     [-1, 0], [-1, +1], [0, +1]],
-    [[+1, 0], [+1, -1], [0, -1],
-     [-1, 0], [0, +1], [+1, +1]],
+    [[-1, -1], [0, -1], [+1, 0], 
+     [0, +1], [-1, +1], [-1, 0]],
+    [[0, -1], [+1, -1], [+1, 0], 
+     [+1, +1], [0, +1], [-1, 0]]
 ]
 
 
@@ -109,7 +109,7 @@ class Application:
                         else:
                             board.get_click(event.pos)
                             self.hide_information()
-                    if event.button == 3 and board.is_castle(event.pos):
+                    if event.button == 3 and board.is_players_castle(event.pos):
                         self.selected_castle = board.get_cell(event.pos)
                         self.show_rent_unit()
                     if event.button == 4:
@@ -347,11 +347,19 @@ class Board:
                         self.make_cells_available()
         elif self.distance(self.selected_unit.coords, clicked_cell) == 1:
             for unit in self.units:
-                if unit.coords == clicked_cell and unit not in player.units:
-                    self.make_cells_available()
-                    self.selected_unit.melee_attack(self.selected_unit.melee, unit)
-                    self.selected_unit = None
-                    return
+                if unit.coords == clicked_cell:
+                    if unit not in player.units:
+                        self.make_cells_available()
+                        self.selected_unit.melee_attack(self.selected_unit.melee, unit)
+                        self.selected_unit = None
+                        return
+                    else:
+                        self.selected_unit = unit
+                        just_selected = True
+                        self.make_cells_unavailable()
+                        available_cells = self.cells_available_from(
+                            self.board[clicked_row][clicked_col], unit.speed)
+                        self.make_cells_available(*available_cells)
         if self.board[clicked_row][clicked_col].region == 'water':
             self.selected_unit = None
             self.make_cells_available()
@@ -412,9 +420,10 @@ class Board:
 
         return visited
 
-    def is_castle(self, mouse_pos):
+    def is_players_castle(self, mouse_pos):
         row, col = self.get_cell(mouse_pos)
-        return self.board[row][col].region == 'castle'
+        return self.board[row][col].region == 'castle' and \
+            self.board[row][col].player == players[turn]
 
     def is_unit(self, mouse_pos):
         cell = self.get_cell(mouse_pos)
@@ -479,8 +488,7 @@ class BoardGenerator:
         self.min_region_cells = round(self.number_of_earth_cells * 0.2)
         self.max_region_cells = round(self.number_of_earth_cells * 0.25)
         self.number_of_villages = round((self.width * self.height) / 100)
-        self.number_of_castles = 2  # TODO Изменение количества замков
-        self.region_chance = 100
+        self.region_chance = 40
 
         self.generator = {(i, j): 'water' for i in range(self.height) for j in range(self.width)}
 
@@ -584,12 +592,13 @@ class BoardGenerator:
             self.generator[village_cell] = 'village'
 
     def generate_castles(self):
-        for _ in range(self.number_of_castles):
+        for player in players:
             available_cells = list(
                 filter(lambda cell: self.generator[cell] != 'water', self.generator))
             castle_cell = random.choice(available_cells)
             self.generator[castle_cell] = 'castle'
             self.update_neighbours(castle_cell, 100, 'water', 'plain')
+            self.board.board[castle_cell[0]][castle_cell[1]].player = player
 
     def delete_pre_cells(self):
         for cell in self.generator:
@@ -634,7 +643,7 @@ class Player:
 
 
 class Cell:
-    def __init__(self, row, col, region='plain'):
+    def __init__(self, row, col, region='plain', player=None):
         self.region = region
         self.col = col
         self.row = row
@@ -644,14 +653,14 @@ class Cell:
         self.num = random.randint(1, 5)
         self.available = True
         self.captured = False
-        self.player_color = None  # какой игрок захватил клетку(если деревня или замок)
+        self.player = player
 
     def load_sprite(self):
         self.sprite = pygame.sprite.Sprite()
-        if self.region == 'castle':
-            # TODO несколько замков
-            self.image_available = pygame.image.load(f'data/{self.region}{1}.png')
-            self.image_unavailable = pygame.image.load(f'data/{self.region}{1}_unavailable.png')
+        if self.player:
+            self.image_available = pygame.image.load(f'data/{self.region}_{self.player.color}.png')
+            self.image_unavailable = pygame.image.load(
+                f'data/{self.region}_{self.player.color}_unavailable.png')
         else:
             self.image_available = pygame.image.load(f'data/{self.region}{self.num}.png')
             self.image_unavailable = pygame.image.load(
@@ -696,16 +705,17 @@ class Unit:
         self.melee = melee
         self.ranged = ranged
         self.defence = 0.5
-        self.sprite_name = sprite
-        self.load_sprite(sprite)
         self.player = player
         if self.player:
-            player.add_unit(self)
+            self.player.add_unit(self)
+        self.sprite_name = sprite
+        self.load_sprite()
 
-    def load_sprite(self, sprite):
+    def load_sprite(self):
         self.sprite = pygame.sprite.Sprite()
-        self.image = pygame.image.load(f'data/units/{sprite}.png')
-        self.sprite.image = pygame.transform.scale(self.image, (round(size * 3 ** 0.5), round(size * 2)))
+        self.image = pygame.image.load(f'data/units/{self.sprite_name}_{self.player.color}.png')
+        self.sprite.image = pygame.transform.scale(
+            self.image, (round(size * 3 ** 0.5), round(size * 2)))
         self.sprite.rect = self.sprite.image.get_rect()
         pixel = offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0]
@@ -780,8 +790,8 @@ class Unit:
 
     def update(self):
         units.remove(self.sprite)
-        self.sprite.image = pygame.transform.scale(self.image,
-                                                   (int(size * 2), int(size * 2)))
+        self.sprite.image = pygame.transform.scale(
+            self.image, (round(size * 3 ** 0.5), round(size * 2)))
         self.sprite.rect = self.sprite.image.get_rect()
         pixel = offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0] + camera.dx
@@ -880,7 +890,7 @@ if __name__ == '__main__':
     delta = original_delta = 4
     indent = 50
 
-    players = [Player(color='#FF0000'), Player(color='#0000FF')]
+    players = [Player(color='red'), Player(color='blue')]
     turn = 0
 
     board = Board(width, height, size)
