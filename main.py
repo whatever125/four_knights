@@ -110,6 +110,7 @@ class Application:
                             board.get_click(event.pos)
                             self.hide_information()
                     if event.button == 3 and board.is_castle(event.pos):
+                        self.selected_castle = board.get_cell(event.pos)
                         self.show_rent_unit()
                     if event.button == 4:
                         self.zoom_in()
@@ -163,16 +164,31 @@ class Application:
         x -= self.rent_unit_coords[0]
         y -= self.rent_unit_coords[1]
         unit_num = x // 200 + 3 * (y // 300)
-        unit_name = all_units[unit_num]['name']
-        print(unit_name)
+        unit = all_units[unit_num]
         player = players[turn]
-        print(player.name)
-        print()
-        # TODO добавить юниа к игроку
+        coords = self.selected_castle
+        neighbors = filter(lambda x: board.board[x[0]][x[1]].region != 'water',
+                           [offset_neighbor(*coords, i) for i in range(6)])
+        for i in neighbors:
+            f = False
+            for j in board.units:
+                if j.coords == i:
+                    f = True
+            if not f:
+                melee = unit['attacks'][0].split('x')
+                ranged = unit['attacks'][0].split('x')
+                unit = Unit(i, board, name=unit['name'], sprite=unit['sprite'], hp=unit['hp'],
+                            speed=unit['speed'], player=player, melee={'type': 'melee', 'attacks': int(melee[0]), 'damage': int(melee[1]), 'mod': 0},
+                            ranged={'type': 'ranged', 'attacks': int(ranged[0]), 'damage': int(ranged[1]), 'mod': 0})
+                player.add_unit(unit)
+                board.units.append(unit)
+                board.update_units()
+                break
 
     def hide_information(self):
         self.rent_unit_surface = None
         self.rent_unit_coords = None
+        self.selected_castle = None
 
     @staticmethod
     def zoom_in():
@@ -573,6 +589,7 @@ class BoardGenerator:
                 filter(lambda cell: self.generator[cell] != 'water', self.generator))
             castle_cell = random.choice(available_cells)
             self.generator[castle_cell] = 'castle'
+            self.update_neighbours(castle_cell, 100, 'water', 'plain')
 
     def delete_pre_cells(self):
         for cell in self.generator:
@@ -688,7 +705,7 @@ class Unit:
     def load_sprite(self, sprite):
         self.sprite = pygame.sprite.Sprite()
         self.image = pygame.image.load(f'data/units/{sprite}.png')
-        self.sprite.image = pygame.transform.scale(self.image, (int(size * 2), int(size * 2)))
+        self.sprite.image = pygame.transform.scale(self.image, (round(size * 3 ** 0.5), round(size * 2)))
         self.sprite.rect = self.sprite.image.get_rect()
         pixel = offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0]
