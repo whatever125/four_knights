@@ -82,7 +82,8 @@ class Application:
             board.render()
             sprites.draw(screen)
             units.draw(screen)
-            pygame.draw.rect(screen, (0, 0, 0), self.button_end_turn)  # TODO изменить цвет, добавить надпись
+            pygame.draw.rect(screen, (0, 0, 0),
+                             self.button_end_turn)  # TODO изменить цвет, добавить надпись
             pygame.display.flip()
             clock.tick(fps)
 
@@ -142,12 +143,13 @@ class Board:
         self.players = [Player(color='#FF0000'), Player(color='#0000FF')]
         self.turn = 0
         self.units = [Unit((10, 10), self, player=self.players[0]),
-                      Unit((11, 11), self, player=self.players[1])]
+                      Unit((11, 11), self, player=self.players[1]),
+                      Unit((15, 15), self, player=self.players[0])]
         self.selected_unit = None
-        self.clicked = ()
         self.generate_board()
 
     def end_turn(self):
+        self.make_cells_available()
         if self.turn == len(self.players) - 1:
             self.turn = 0
         else:
@@ -219,36 +221,43 @@ class Board:
         if 0 <= x < self.height and 0 <= y < self.width:
             self.on_click(cell)
 
-    def on_click(self, cell_coords):
+    def on_click(self, clicked_cell):
+        clicked_row, clicked_col = clicked_cell
         player = self.players[self.turn]
-        self.clicked = cell_coords
-        select = False
-        if not self.selected_unit or int(
-                self.find_path(cell_coords, self.selected_unit.coords)) != 1:
-            board.make_cells_available()
-            for unit in player.units:
-                if unit.coords == cell_coords and unit in player.units:
-                    self.selected_unit = unit
-                    select = True
-                    board.make_cells_unavailable()
-                    available_cells = board.cells_available_from(board.board[cell_coords[0]][cell_coords[1]], unit.speed)
-                    board.make_cells_available(*available_cells)
-        elif int(self.find_path(cell_coords, self.selected_unit.coords)) == 1:
+        just_selected = False
+        if self.selected_unit and self.distance(self.selected_unit.coords, clicked_cell) == 0:
+            self.selected_unit = None
+            self.make_cells_available()
+        elif not self.selected_unit or self.distance(self.selected_unit.coords, clicked_cell) > 1:
+            self.make_cells_available()
             for unit in self.units:
-                if unit.coords == cell_coords:
-                    board.make_cells_available()
+                if unit.coords == clicked_cell:
+                    if unit in player.units:
+                        self.selected_unit = unit
+                        just_selected = True
+                        self.make_cells_unavailable()
+                        available_cells = self.cells_available_from(
+                            self.board[clicked_row][clicked_col], unit.speed)
+                        self.make_cells_available(*available_cells)
+                    else:
+                        self.selected_unit = None
+                        self.make_cells_available()
+        elif self.distance(self.selected_unit.coords, clicked_cell) == 1:
+            for unit in self.units:
+                if unit.coords == clicked_cell and unit not in player.units:
+                    self.make_cells_available()
                     self.selected_unit.melee_attack(self.selected_unit.melee, unit)
                     self.selected_unit = None
-                    self.clicked = None
                     return
-        if self.board[cell_coords[0]][cell_coords[1]].region == 'water':
+        if self.board[clicked_row][clicked_col].region == 'water':
             self.selected_unit = None
-        elif not select and self.selected_unit and \
-                self.find_path(self.selected_unit.coords, cell_coords) <= self.selected_unit.speed:
-            board.make_cells_available()
-            self.selected_unit.move_to(*cell_coords)
+            self.make_cells_available()
+        elif not just_selected and self.selected_unit and self.board[clicked_row][clicked_col] \
+                in self.cells_available_from(self.board[self.selected_unit.coords[0]][
+                                                 self.selected_unit.coords[1]], self.selected_unit.speed):
+            self.make_cells_available()
+            self.selected_unit.move_to(*clicked_cell)
             self.selected_unit = None
-            self.clicked = None
 
     def find_path(self, start, goal):
         frontier = PriorityQueue()
@@ -377,7 +386,8 @@ class BoardGenerator:
         self.generator[mid_cell] = 'plain'
         self.update_neighbours(mid_cell, 100, 'water', 'pre_plain')
         for _ in range(self.number_of_earth_cells):
-            neighbours = list(filter(lambda cell: self.generator[cell] == 'pre_plain', self.generator))
+            neighbours = list(
+                filter(lambda cell: self.generator[cell] == 'pre_plain', self.generator))
             neighbour = random.choice(neighbours)
             self.generator[neighbour] = 'plain'
             self.update_neighbours(neighbour, 40, 'water', 'pre_plain')
@@ -453,13 +463,15 @@ class BoardGenerator:
 
     def generate_villages(self):
         for _ in range(self.number_of_villages):
-            available_cells = list(filter(lambda cell: self.generator[cell] != 'water', self.generator))
+            available_cells = list(
+                filter(lambda cell: self.generator[cell] != 'water', self.generator))
             village_cell = random.choice(available_cells)
             self.generator[village_cell] = 'village'
 
     def generate_castles(self):
         for _ in range(self.number_of_castles):
-            available_cells = list(filter(lambda cell: self.generator[cell] != 'water', self.generator))
+            available_cells = list(
+                filter(lambda cell: self.generator[cell] != 'water', self.generator))
             castle_cell = random.choice(available_cells)
             self.generator[castle_cell] = 'castle'
 
@@ -524,7 +536,8 @@ class Cell:
             self.image_unavailable = pygame.image.load(f'data/{self.region}{1}_unavailable.png')
         else:
             self.image_available = pygame.image.load(f'data/{self.region}{self.num}.png')
-            self.image_unavailable = pygame.image.load(f'data/{self.region}{self.num}_unavailable.png')
+            self.image_unavailable = pygame.image.load(
+                f'data/{self.region}{self.num}_unavailable.png')
         self.sprite.image = pygame.transform.scale(
             self.image_available, (round(size * 3 ** 0.5) + 2, round(size * 2) + 2))
         self.sprite.rect = self.sprite.image.get_rect()
