@@ -1,5 +1,6 @@
 import pygame
 import pygame.freetype
+import textwrap
 import random
 import sys
 from queue import PriorityQueue
@@ -86,6 +87,9 @@ class Application:
         self.button_end_turn = pygame.Rect(600, 600, 100, 30)  # TODO изменить положение кнопки
         self.rent_unit_surface = None
         self.rent_unit_coords = None
+        self.unit_info_surface = None
+        self.unit_info_coords = None
+        self.selected_castle = None
 
     def start(self):
         self.main()
@@ -109,9 +113,13 @@ class Application:
                         else:
                             board.get_click(event.pos)
                             self.hide_information()
-                    if event.button == 3 and board.is_players_castle(event.pos):
-                        self.selected_castle = board.get_cell(event.pos)
-                        self.show_rent_unit()
+                    if event.button == 3:
+                        if board.is_players_castle(event.pos):
+                            self.selected_castle = board.get_cell(event.pos)
+                            board.make_cells_available()
+                            self.show_rent_unit()
+                        elif board.is_unit(event.pos):
+                            self.show_unit_info(event.pos)
                     if event.button == 4:
                         self.zoom_in()
                         self.hide_information()
@@ -134,6 +142,8 @@ class Application:
                              self.button_end_turn)  # TODO изменить цвет, добавить надпись
             if self.rent_unit_surface:
                 screen.blit(self.rent_unit_surface, self.rent_unit_coords)
+            if self.unit_info_surface:
+                screen.blit(self.unit_info_surface, self.unit_info_coords)
             pygame.display.flip()
             clock.tick(fps)
 
@@ -151,9 +161,9 @@ class Application:
                 line += str(all_units[i][inf])
                 lines.append(line)
             for j in range(len(lines)):
-                information_font.render_to(self.rent_unit_surface,
-                                           (200 * (i % 3) + 20, 300 * (i // 3) + 20 * j + 160),
-                                           lines[j], color_font)
+                rent_unit_font.render_to(self.rent_unit_surface,
+                                         (200 * (i % 3) + 20, 300 * (i // 3) + 20 * j + 160),
+                                         lines[j], color_font)
             unit_image = pygame.image.load(f'data/units/{all_units[i]["sprite"]}.png')
             unit_image = pygame.transform.scale(unit_image, (160, 160))
             unit_rect = unit_image.get_rect(topleft=(200 * (i % 3) + 20, 300 * (i // 3) + 10))
@@ -167,7 +177,7 @@ class Application:
         unit = all_units[unit_num]
         player = players[turn]
         coords = self.selected_castle
-        neighbors = filter(lambda x: board.board[x[0]][x[1]].region != 'water',
+        neighbors = filter(lambda cell: board.board[cell[0]][cell[1]].region != 'water',
                            [offset_neighbor(*coords, i) for i in range(6)])
         for i in neighbors:
             f = False
@@ -177,9 +187,13 @@ class Application:
             if not f and player.money >= int(unit['cost']):
                 melee = unit['attacks'][0].split('x')
                 ranged = unit['attacks'][0].split('x')
-                unit = Unit(i, board, name=unit['name'], cost=unit['cost'], sprite=unit['sprite'],
+                unit = Unit(i, board,
+                            name=unit['name'],
+                            cost=unit['cost'],
+                            sprite=unit['sprite'],
                             hp=unit['hp'],
-                            speed=unit['speed'], player=player,
+                            speed=unit['speed'],
+                            player=player,
                             melee={'type': 'melee', 'attacks': int(melee[0]),
                                    'damage': int(melee[1]), 'mod': 0},
                             ranged={'type': 'ranged', 'attacks': int(ranged[0]),
@@ -190,7 +204,26 @@ class Application:
                 player.money -= int(unit.cost)
                 break
 
+    def show_unit_info(self, mouse_pos):
+        self.unit_info_surface = pygame.Surface((200, 140))
+        self.unit_info_surface.fill((0, 0, 0))
+        self.unit_info_surface.set_alpha(200)
+        self.unit_info_coords = mouse_pos
+        info = board.unit_info(mouse_pos)
+        lines = []
+        for inf in info:
+            line = inf
+            line += ': '
+            line += str(info[inf])
+            lines.append(line)
+        for i in range(len(lines)):
+            rent_unit_font.render_to(self.unit_info_surface,
+                                     (10, 20 * i + 10),
+                                     lines[i], color_font)
+
     def hide_information(self):
+        self.unit_info_surface = None
+        self.unit_info_coords = None
         self.rent_unit_surface = None
         self.rent_unit_coords = None
         self.selected_castle = None
@@ -249,7 +282,7 @@ class Application:
         else:
             turn += 1
         players[turn].money += (
-                    players[turn].income + len(players[turn].villages) - len(players[turn].units))
+                players[turn].income + len(players[turn].villages) - len(players[turn].units))
 
     @staticmethod
     def terminate():
@@ -266,13 +299,23 @@ class Board:
         self.selected_unit = None
         self.generate_board()
         self.units = [
-            Unit(players[0].castles[0].coords, self, player=players[0], name='Герменита',
-                 sprite='nita', hp=50, speed=6,
-                 cost=0, melee={'damage': 5, 'attacks': 4, 'mod': 10, 'type': 'melee'},
+            Unit(players[0].castles[0].coords, self,
+                 player=players[0],
+                 name='Герменита',
+                 sprite='nita',
+                 hp=50,
+                 speed=6,
+                 cost=0,
+                 melee={'damage': 5, 'attacks': 4, 'mod': 10, 'type': 'melee'},
                  ranged={'damage': 10, 'attacks': 1, 'mod': 0, 'type': 'ranged'}),
-            Unit(players[1].castles[0].coords, self, player=players[1], name='Афина', sprite='nana',
-                 hp=30, speed=7,
-                 cost=0, melee={'damage': 5, 'attacks': 1, 'mod': 0, 'type': 'melee'},
+            Unit(players[1].castles[0].coords, self,
+                 player=players[1],
+                 name='Афина',
+                 sprite='nana',
+                 hp=30,
+                 speed=7,
+                 cost=0,
+                 melee={'damage': 5, 'attacks': 1, 'mod': 0, 'type': 'melee'},
                  ranged={'damage': 15, 'attacks': 2, 'mod': 10, 'type': 'ranged'})]
 
     def generate_board(self):
@@ -442,13 +485,6 @@ class Board:
         return self.board[row][col].region == 'castle' and \
                self.board[row][col].player == players[turn]
 
-    def is_unit(self, mouse_pos):
-        cell = self.get_cell(mouse_pos)
-        for unit in self.units:
-            if unit.coords == cell:
-                return True
-        return False
-
     def update_cell_size(self):
         self.cell_size = size
 
@@ -493,6 +529,26 @@ class Board:
 
     def delete_unit(self, unit):
         self.units = list(filter(lambda x: x != unit, self.units))
+
+    def is_unit(self, mouse_pos):
+        cell = self.get_cell(mouse_pos)
+        for unit in self.units:
+            if unit.coords == cell:
+                return True
+        return False
+
+    def unit_info(self, mouse_pos):
+        cell = self.get_cell(mouse_pos)
+        info = {}
+        for unit in self.units:
+            if unit.coords == cell:
+                info['Имя'] = unit.name
+                info['Игрок'] = unit.player.name
+                info['HP'] = unit.hp
+                info['Скорость'] = unit.speed
+                info['Атака 1'] = f'{unit.melee["attacks"]}x{unit.melee["damage"]}'
+                info['Атака 2'] = f'{unit.ranged["attacks"]}x{unit.ranged["damage"]}'
+        return info
 
 
 class BoardGenerator:
@@ -686,13 +742,15 @@ class Cell:
     def load_sprite(self):
         self.sprite = pygame.sprite.Sprite()
         if self.player:
-            self.image_available = pygame.image.load(f'data/{self.region}_{self.player.color}.png')
+            self.image_available = pygame.image.load(
+                f'data/cells/{self.region}_{self.player.color}.png')
             self.image_unavailable = pygame.image.load(
-                f'data/{self.region}_{self.player.color}_unavailable.png')
+                f'data/cells/{self.region}_{self.player.color}_unavailable.png')
         else:
-            self.image_available = pygame.image.load(f'data/{self.region}{self.num}.png')
+            self.image_available = pygame.image.load(
+                f'data/cells/{self.region}{self.num}.png')
             self.image_unavailable = pygame.image.load(
-                f'data/{self.region}{self.num}_unavailable.png')
+                f'data/cells/{self.region}{self.num}_unavailable.png')
         self.sprite.image = pygame.transform.scale(
             self.image_available, (round(size * 3 ** 0.5) + 2, round(size * 2) + 2))
         self.sprite.rect = self.sprite.image.get_rect()
@@ -760,7 +818,7 @@ class Unit:
             self.player.villages.append(board.board[x][y])
             self.board.board[x][y].player_color = self.player.color
             self.board.board[x][y].player = self.player
-        elif (self.board.board[x][y].captured) and (self.board.board[x][y].region == 'village'):
+        elif self.board.board[x][y].captured and self.board.board[x][y].region == 'village':
             self.board.board[x][y].player_color = self.player.color
             self.board.board[x][y].player.delete_village(board.board[x][y])
             self.player.villages.append(board.board[x][y])
@@ -770,7 +828,6 @@ class Unit:
             self.board.board[x][y].player = self.player
             self.player.castles.append(board.board[x][y])
             board.board[x][y].load_sprite()
-
 
     def die(self):
         board.delete_unit(self)
@@ -923,8 +980,10 @@ class Camera:
 
 if __name__ == '__main__':
     pygame.init()
+
     sprites = pygame.sprite.Group()
     units = pygame.sprite.Group()
+
     width = 30
     height = 30
     size = original_size = 15
@@ -935,6 +994,7 @@ if __name__ == '__main__':
     turn = 0
 
     board = Board(width, height, size)
+
     screen_size = screen_width, screen_height = round(width * size * 3 ** 0.5 + indent * 2), \
                                                 round(height * size * 1.5 + indent * 2)
     screen = pygame.display.set_mode(screen_size)
@@ -943,7 +1003,8 @@ if __name__ == '__main__':
     clock = pygame.time.Clock()
     camera = Camera()
 
-    information_font = pygame.freetype.Font('data/fonts/thintel.ttf', 24)
+    rent_unit_font = pygame.freetype.Font('data/fonts/thintel.ttf', 24)
+    unit_info_font = pygame.freetype.Font('data/fonts/thintel.ttf', 30)
 
     app = Application()
     app.start()
