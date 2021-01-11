@@ -16,7 +16,7 @@ all_units = [
      'cost': 15,
      'speed': 6,
      'attacks': ('1x10', '-')},
-    {'name': 'Тяжелый пехотинец',
+    {'name': 'Пехотинец',
      'sprite': 'heavyinfantry',
      'hp': 30,
      'cost': 20,
@@ -89,6 +89,8 @@ class Application:
         self.unit_info_surface = None
         self.unit_info_coords = None
         self.selected_castle = None
+        self.choose_attack_surface = None
+        self.choose_attack_coords = None
 
     def start(self):
         self.main()
@@ -105,9 +107,13 @@ class Application:
                         if self.button_end_turn.collidepoint(mouse_pos):
                             self.end_turn()
                             self.hide_information()
-                        elif self.rent_unit_surface and pygame.Rect(*self.rent_unit_coords, 600,
-                                                                    600).collidepoint(mouse_pos):
+                        elif self.rent_unit_surface and pygame.Rect(
+                                *self.rent_unit_coords, 600, 600).collidepoint(mouse_pos):
                             self.rent_unit(mouse_pos)
+                            self.hide_information()
+                        elif self.choose_attack_surface and pygame.Rect(
+                                *self.choose_attack_coords, 400, 400).collidepoint(mouse_pos):
+                            self.attack(event.pos)
                             self.hide_information()
                         else:
                             board.get_click(event.pos)
@@ -121,6 +127,12 @@ class Application:
                         elif board.is_unit(event.pos):
                             self.hide_information()
                             self.show_unit_info(event.pos)
+                        else:
+                            board.make_cells_available()
+                            self.hide_information()
+                            # это пример, поменяй юнитов на нужные
+                            self.show_choose_attack(Unit((0, 0), board, players[1], all_units[2]),
+                                                    Unit((0, 0), board, players[0], all_units[2]))
                     if event.button == 4:
                         self.zoom_in()
                         self.hide_information()
@@ -151,6 +163,8 @@ class Application:
                 screen.blit(self.rent_unit_surface, self.rent_unit_coords)
             if self.unit_info_surface:
                 screen.blit(self.unit_info_surface, self.unit_info_coords)
+            if self.choose_attack_surface:
+                screen.blit(self.choose_attack_surface, self.choose_attack_coords)
             pygame.display.flip()
             clock.tick(fps)
 
@@ -176,7 +190,7 @@ class Application:
                 line += str(unit_info[inf])
                 lines.append(line)
             for j in range(len(lines)):
-                rent_unit_font.render_to(self.rent_unit_surface,
+                title3_font.render_to(self.rent_unit_surface,
                                          (200 * (i % 3) + 20, 300 * (i // 3) + 20 * j + 160),
                                          lines[j], color_font)
             unit_image = pygame.image.load(f'data/units/{all_units[i]["sprite"]}.png')
@@ -210,7 +224,7 @@ class Application:
     def show_unit_info(self, mouse_pos):
         self.unit_info_surface = pygame.Surface((200, 140))
         self.unit_info_surface.fill((0, 0, 0))
-        self.unit_info_surface.set_alpha(200)
+        self.unit_info_surface.set_alpha(210)
         self.unit_info_coords = mouse_pos
         info = board.unit_info(mouse_pos)
         lines = []
@@ -220,15 +234,56 @@ class Application:
             line += str(info[inf])
             lines.append(line)
         for i in range(len(lines)):
-            rent_unit_font.render_to(self.unit_info_surface,
-                                     (10, 20 * i + 10),
-                                     lines[i], color_font)
+            title3_font.render_to(self.unit_info_surface, (10, 20 * i + 10), lines[i], color_font)
+
+    def show_choose_attack(self, unit1, unit2):
+        self.choose_attack_surface = pygame.Surface((400, 400))
+        self.choose_attack_surface.fill((0, 0, 0))
+        self.choose_attack_surface.set_alpha(210)
+        display_width, display_height = pygame.display.get_surface().get_size()
+        self.choose_attack_coords = (display_width - 400) // 2, (display_height - 400) // 2
+
+        title1_font.render_to(self.choose_attack_surface, (125, 25), 'Атаковать врага', color_font)
+        unit1_image = pygame.transform.scale(unit1.image, (100, 100))
+        unit1_rect = unit1_image.get_rect(topleft=(50, 75))
+        self.choose_attack_surface.blit(unit1_image, unit1_rect)
+        unit2_image = pygame.transform.scale(unit2.image, (100, 100))
+        unit2_rect = unit2_image.get_rect(topleft=(250, 75))
+        self.choose_attack_surface.blit(unit2_image, unit2_rect)
+        title2_font.render_to(self.choose_attack_surface, (0, 200),
+                                 unit1.name.rjust(24, ' '), color_font)
+        title2_font.render_to(self.choose_attack_surface, (200, 200),
+                                 unit2.name.rjust(24, ' '), color_font)
+        title2_font.render_to(self.choose_attack_surface, (130, 275),
+                                 '--- ближняя ---', color_font)
+        title2_font.render_to(self.choose_attack_surface, (50, 275),
+                                 f'{unit1.melee["attacks"]}x{unit1.melee["damage"]}', color_font)
+        title2_font.render_to(self.choose_attack_surface, (300, 275),
+                                 f'{unit2.melee["attacks"]}x{unit2.melee["damage"]}', color_font)
+        if not unit1.ranged or not unit2.ranged:
+            return
+        title2_font.render_to(self.choose_attack_surface, (130, 340),
+                                 '--- дальняя ---', color_font)
+        title2_font.render_to(self.choose_attack_surface, (50, 340),
+                                 f'{unit1.melee["attacks"]}x{unit1.melee["damage"]}', color_font)
+        title2_font.render_to(self.choose_attack_surface, (300, 340),
+                                 f'{unit2.melee["attacks"]}x{unit2.melee["damage"]}', color_font)
+
+    def attack(self, mouse_pos):
+        x, y = mouse_pos
+        y -= self.choose_attack_coords[1]
+        if 250 <= y < 310:
+            print('melee_attack')
+        if 310 <= y:
+            print('ranged_attack')
 
     def hide_information(self):
         self.unit_info_surface = None
         self.unit_info_coords = None
         self.rent_unit_surface = None
         self.rent_unit_coords = None
+        self.choose_attack_surface = None
+        self.choose_attack_coords = None
 
     @staticmethod
     def zoom_in():
@@ -1016,8 +1071,9 @@ if __name__ == '__main__':
     clock = pygame.time.Clock()
     camera = Camera()
 
-    rent_unit_font = pygame.freetype.Font('data/fonts/thintel.ttf', 24)
-    unit_info_font = pygame.freetype.Font('data/fonts/thintel.ttf', 30)
+    title3_font = pygame.freetype.Font('data/fonts/thintel.ttf', 24)
+    title2_font = pygame.freetype.Font('data/fonts/thintel.ttf', 30)
+    title1_font = pygame.freetype.Font('data/fonts/thintel.ttf', 36)
 
     app = Application()
     app.start()
