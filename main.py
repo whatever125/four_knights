@@ -70,8 +70,8 @@ class Application:
                     if event.button == 1:
                         board.get_click(event.pos)
                         self.hide_information()
-                    if event.button == 3:
-                        self.show_information()
+                    if event.button == 3 and board.is_unit(event.pos):
+                        self.show_information(event.pos)
                     if event.button == 4:
                         self.zoom_in()
                         self.hide_information()
@@ -92,12 +92,11 @@ class Application:
             pygame.display.flip()
             clock.tick(fps)
 
-    def show_information(self):
+    def show_information(self, mouse_pos):
         self.information_surface = pygame.Surface((200, 200))
         self.information_surface.fill((0, 0, 0))
         self.information_surface.set_alpha(200)
-        line = "Товарищи! постоянный количественный рост и сфера нашей активности требуют от нас " \
-               "анализа развития. Идейные соображения высшего порядка, а также постоянный рост"
+        line = board.unit_info(mouse_pos)
         line_width = 20
         text = textwrap.fill(line, width=line_width).split('\n')
         for i in range(len(text)):
@@ -310,6 +309,16 @@ class Board:
 
     def delete_unit(self, unit):
         self.units = list(filter(lambda x: x != unit, self.units))
+
+    def is_unit(self, mouse_pos):
+        cell = self.get_cell(mouse_pos)
+        for unit in self.units:
+            if unit.coords == cell:
+                return True
+        return False
+    
+    def unit_info(self, mouse_pos):
+        return 'unit info'  # TODO
 
 
 class BoardGenerator:
