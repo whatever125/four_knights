@@ -377,6 +377,8 @@ class Board:
         self.units = [
             Unit(players[0].castles[0].coords, self, players[0], all_units[0]),
             Unit(players[1].castles[0].coords, self, players[1], all_units[0])]
+        for i in self.units:
+            i.new_turn()
 
     def generate_board(self):
         board_generator = BoardGenerator(self)
@@ -964,7 +966,7 @@ class Unit:
                 'attacks': (melee, ranged)}
 
     def new_turn(self):
-        if board.board[self.coords[0]][self.coords[1]].region == 'village':
+        if self.board.board[self.coords[0]][self.coords[1]].region == 'village':
             self.hp += 8
         else:
             self.hp += 2
