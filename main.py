@@ -91,6 +91,8 @@ class Application:
         self.selected_castle = None
         self.choose_attack_surface = None
         self.choose_attack_coords = None
+        self.unit1 = None
+        self.unit2 = None
 
     def start(self):
         self.main()
@@ -117,7 +119,6 @@ class Application:
                             self.hide_information()
                         else:
                             board.get_click(event.pos)
-                            self.hide_information()
                     if event.button == 3:
                         if board.is_players_castle(event.pos):
                             self.selected_castle = board.get_cell(event.pos)
@@ -130,9 +131,6 @@ class Application:
                         else:
                             board.make_cells_available()
                             self.hide_information()
-                            # это пример, поменяй юнитов на нужные
-                            self.show_choose_attack(Unit((0, 0), board, players[1], all_units[2]),
-                                                    Unit((0, 0), board, players[0], all_units[2]))
                     if event.button == 4:
                         self.zoom_in()
                         self.hide_information()
@@ -237,6 +235,8 @@ class Application:
             title3_font.render_to(self.unit_info_surface, (10, 20 * i + 10), lines[i], color_font)
 
     def show_choose_attack(self, unit1, unit2):
+        self.unit1 = unit1
+        self.unit2 = unit2
         self.choose_attack_surface = pygame.Surface((400, 400))
         self.choose_attack_surface.fill((0, 0, 0))
         self.choose_attack_surface.set_alpha(210)
@@ -260,22 +260,30 @@ class Application:
                                  f'{unit1.melee["attacks"]}x{unit1.melee["damage"]}', color_font)
         title2_font.render_to(self.choose_attack_surface, (300, 275),
                                  f'{unit2.melee["attacks"]}x{unit2.melee["damage"]}', color_font)
-        if not unit1.ranged or not unit2.ranged:
+        if not unit1.ranged:
+            return
+        if not unit2.ranged:
+            title2_font.render_to(self.choose_attack_surface, (130, 340),
+                                  '--- дальняя ---', color_font)
+            title2_font.render_to(self.choose_attack_surface, (50, 340),
+                                  f'{unit1.ranged["attacks"]}x{unit1.ranged["damage"]}', color_font)
+            title2_font.render_to(self.choose_attack_surface, (300, 340),
+                                  f'-', color_font)
             return
         title2_font.render_to(self.choose_attack_surface, (130, 340),
                                  '--- дальняя ---', color_font)
         title2_font.render_to(self.choose_attack_surface, (50, 340),
-                                 f'{unit1.melee["attacks"]}x{unit1.melee["damage"]}', color_font)
+                                 f'{unit1.ranged["attacks"]}x{unit1.ranged["damage"]}', color_font)
         title2_font.render_to(self.choose_attack_surface, (300, 340),
-                                 f'{unit2.melee["attacks"]}x{unit2.melee["damage"]}', color_font)
+                                 f'{unit2.ranged["attacks"]}x{unit2.ranged["damage"]}', color_font)
 
     def attack(self, mouse_pos):
         x, y = mouse_pos
         y -= self.choose_attack_coords[1]
         if 250 <= y < 310:
-            print('melee_attack')
+            self.unit1.melee_attack(self.unit1.melee, self.unit2)
         if 310 <= y:
-            print('ranged_attack')
+            self.unit1.ranged_attack(self.unit1.ranged, self.unit2)
 
     def hide_information(self):
         self.unit_info_surface = None
@@ -340,6 +348,8 @@ class Application:
             turn += 1
         players[turn].money += (
                 players[turn].income + len(players[turn].villages) - len(players[turn].units))
+        for i in players[turn].units:
+            i.new_turn()
 
     @staticmethod
     def terminate():
@@ -450,7 +460,7 @@ class Board:
                         just_selected = True
                         self.make_cells_unavailable()
                         available_cells = self.cells_available_from(
-                            self.board[clicked_row][clicked_col], unit.speed)
+                            self.board[clicked_row][clicked_col], unit.mp)
                         self.make_cells_available(*available_cells)
                     else:
                         self.selected_unit = None
@@ -460,7 +470,8 @@ class Board:
                 if unit.coords == clicked_cell:
                     if unit not in player.units:
                         self.make_cells_available()
-                        self.selected_unit.melee_attack(self.selected_unit.melee, unit)
+                        if self.selected_unit.turn_attack:
+                            app.show_choose_attack(self.selected_unit, unit)
                         self.selected_unit = None
                         return
                     else:
@@ -468,7 +479,7 @@ class Board:
                         just_selected = True
                         self.make_cells_unavailable()
                         available_cells = self.cells_available_from(
-                            self.board[clicked_row][clicked_col], unit.speed)
+                            self.board[clicked_row][clicked_col], unit.mp)
                         self.make_cells_available(*available_cells)
         if self.board[clicked_row][clicked_col].region == 'water':
             self.selected_unit = None
@@ -476,8 +487,9 @@ class Board:
         elif not just_selected and self.selected_unit and self.board[clicked_row][clicked_col] \
                 in self.cells_available_from(self.board[self.selected_unit.coords[0]][
                                                  self.selected_unit.coords[1]],
-                                             self.selected_unit.speed):
+                                             self.selected_unit.mp):
             self.make_cells_available()
+            self.selected_unit.mp -= int(board.distance(self.selected_unit.coords, clicked_cell))
             self.selected_unit.move_to(*clicked_cell)
             self.selected_unit = None
 
@@ -841,8 +853,11 @@ class Unit:
         self.name = unit_type['name']
         self.cost = unit_type['cost']
         self.sprite_name = unit_type['sprite']
-        self.hp = unit_type['hp']
+        self.max_hp = unit_type['hp']
+        self.hp = self.max_hp
         self.speed = unit_type['speed']
+        self.mp = 0
+        self.turn_attack = True
         self.defence = 0.5
         melee = unit_type['attacks'][0].split('x')
         self.melee = {'type': 'melee', 'attacks': int(melee[0]), 'damage': int(melee[1]), 'mod': 0}
@@ -894,6 +909,8 @@ class Unit:
             self.player.delete_unit(self)
 
     def melee_attack(self, attack, enemy):
+        self.turn_attack = False
+        self.mp = 0
         for i in range(attack['attacks']):
             if random.random() + attack['mod'] > enemy.defence:
                 enemy.take_damage(attack['damage'])
@@ -911,6 +928,8 @@ class Unit:
                         return
 
     def ranged_attack(self, attack, enemy):
+        self.turn_attack = False
+        self.mp = 0
         for i in range(attack['attacks']):
             if random.random() + attack['mod'] > enemy.defence:
                 enemy.take_damage(attack['damage'])
@@ -943,6 +962,16 @@ class Unit:
                 'cost': self.cost,
                 'speed': self.speed,
                 'attacks': (melee, ranged)}
+
+    def new_turn(self):
+        if board.board[self.coords[0]][self.coords[1]].region == 'village':
+            self.hp += 8
+        else:
+            self.hp += 2
+        if self.hp > self.max_hp:
+            self.hp = self.max_hp
+        self.mp = self.speed
+        self.turn_attack = True
 
     def update(self):
         units.remove(self.sprite)
