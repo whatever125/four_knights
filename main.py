@@ -1,6 +1,5 @@
 import pygame
 import pygame.freetype
-import textwrap
 import random
 import sys
 from queue import PriorityQueue
@@ -117,8 +116,10 @@ class Application:
                         if board.is_players_castle(event.pos):
                             self.selected_castle = board.get_cell(event.pos)
                             board.make_cells_available()
+                            self.hide_information()
                             self.show_rent_unit()
                         elif board.is_unit(event.pos):
+                            self.hide_information()
                             self.show_unit_info(event.pos)
                     if event.button == 4:
                         self.zoom_in()
@@ -154,11 +155,19 @@ class Application:
         display_width, display_height = pygame.display.get_surface().get_size()
         self.rent_unit_coords = (display_width - 600) // 2, (display_height - 600) // 2
         for i in range(len(all_units)):
+            unit_info = {
+                'Имя': all_units[i]['name'],
+                'HP': all_units[i]['hp'],
+                'Цена': all_units[i]['cost'],
+                'Скорость': all_units[i]['speed'],
+                'Атака 1': all_units[i]['attacks'][0],
+                'Атака 2': all_units[i]['attacks'][1],
+            }
             lines = []
-            for inf in all_units[i]:
+            for inf in unit_info:
                 line = inf
                 line += ': '
-                line += str(all_units[i][inf])
+                line += str(unit_info[inf])
                 lines.append(line)
             for j in range(len(lines)):
                 rent_unit_font.render_to(self.rent_unit_surface,
@@ -186,18 +195,29 @@ class Application:
                     f = True
             if not f and player.money >= int(unit['cost']):
                 melee = unit['attacks'][0].split('x')
-                ranged = unit['attacks'][0].split('x')
-                unit = Unit(i, board,
-                            name=unit['name'],
-                            cost=unit['cost'],
-                            sprite=unit['sprite'],
-                            hp=unit['hp'],
-                            speed=unit['speed'],
-                            player=player,
-                            melee={'type': 'melee', 'attacks': int(melee[0]),
-                                   'damage': int(melee[1]), 'mod': 0},
-                            ranged={'type': 'ranged', 'attacks': int(ranged[0]),
-                                    'damage': int(ranged[1]), 'mod': 0})
+                if unit['attacks'][1] == '-':
+                    unit = Unit(i, board,
+                                name=unit['name'],
+                                cost=unit['cost'],
+                                sprite=unit['sprite'],
+                                hp=unit['hp'],
+                                speed=unit['speed'],
+                                player=player,
+                                melee={'type': 'melee', 'attacks': int(melee[0]),
+                                       'damage': int(melee[1]), 'mod': 0})
+                else:
+                    ranged = unit['attacks'][1].split('x')
+                    unit = Unit(i, board,
+                                name=unit['name'],
+                                cost=unit['cost'],
+                                sprite=unit['sprite'],
+                                hp=unit['hp'],
+                                speed=unit['speed'],
+                                player=player,
+                                melee={'type': 'melee', 'attacks': int(melee[0]),
+                                       'damage': int(melee[1]), 'mod': 0},
+                                ranged={'type': 'ranged', 'attacks': int(ranged[0]),
+                                        'damage': int(ranged[1]), 'mod': 0})
                 player.add_unit(unit)
                 board.units.append(unit)
                 board.update_units()
@@ -547,7 +567,10 @@ class Board:
                 info['HP'] = unit.hp
                 info['Скорость'] = unit.speed
                 info['Атака 1'] = f'{unit.melee["attacks"]}x{unit.melee["damage"]}'
-                info['Атака 2'] = f'{unit.ranged["attacks"]}x{unit.ranged["damage"]}'
+                if unit.ranged:
+                    info['Атака 2'] = f'{unit.ranged["attacks"]}x{unit.ranged["damage"]}'
+                else:
+                    info['Атака 2'] = '-'
         return info
 
 
