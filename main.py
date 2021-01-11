@@ -194,30 +194,7 @@ class Application:
                 if j.coords == i:
                     f = True
             if not f and player.money >= int(unit['cost']):
-                melee = unit['attacks'][0].split('x')
-                if unit['attacks'][1] == '-':
-                    unit = Unit(i, board,
-                                name=unit['name'],
-                                cost=unit['cost'],
-                                sprite=unit['sprite'],
-                                hp=unit['hp'],
-                                speed=unit['speed'],
-                                player=player,
-                                melee={'type': 'melee', 'attacks': int(melee[0]),
-                                       'damage': int(melee[1]), 'mod': 0})
-                else:
-                    ranged = unit['attacks'][1].split('x')
-                    unit = Unit(i, board,
-                                name=unit['name'],
-                                cost=unit['cost'],
-                                sprite=unit['sprite'],
-                                hp=unit['hp'],
-                                speed=unit['speed'],
-                                player=player,
-                                melee={'type': 'melee', 'attacks': int(melee[0]),
-                                       'damage': int(melee[1]), 'mod': 0},
-                                ranged={'type': 'ranged', 'attacks': int(ranged[0]),
-                                        'damage': int(ranged[1]), 'mod': 0})
+                unit = Unit(i, board, player, unit)
                 player.add_unit(unit)
                 board.units.append(unit)
                 board.update_units()
@@ -246,7 +223,6 @@ class Application:
         self.unit_info_coords = None
         self.rent_unit_surface = None
         self.rent_unit_coords = None
-        self.selected_castle = None
 
     @staticmethod
     def zoom_in():
@@ -319,24 +295,8 @@ class Board:
         self.selected_unit = None
         self.generate_board()
         self.units = [
-            Unit(players[0].castles[0].coords, self,
-                 player=players[0],
-                 name='Герменита',
-                 sprite='nita',
-                 hp=50,
-                 speed=6,
-                 cost=0,
-                 melee={'damage': 5, 'attacks': 4, 'mod': 10, 'type': 'melee'},
-                 ranged={'damage': 10, 'attacks': 1, 'mod': 0, 'type': 'ranged'}),
-            Unit(players[1].castles[0].coords, self,
-                 player=players[1],
-                 name='Афина',
-                 sprite='nana',
-                 hp=30,
-                 speed=7,
-                 cost=0,
-                 melee={'damage': 5, 'attacks': 1, 'mod': 0, 'type': 'melee'},
-                 ranged={'damage': 15, 'attacks': 2, 'mod': 10, 'type': 'ranged'})]
+            Unit(players[0].castles[0].coords, self, players[0], all_units[0]),
+            Unit(players[1].castles[0].coords, self, players[1], all_units[0])]
 
     def generate_board(self):
         board_generator = BoardGenerator(self)
@@ -802,22 +762,27 @@ class Cell:
 
 
 class Unit:
-    def __init__(self, coords, board, hp=20, speed=6, cost=15, sprite='default', name='Рыцарь',
-                 melee={'damage': 10, 'attacks': 1, 'mod': 0, 'type': 'melee'}, ranged=None,
-                 player=None):
+    def __init__(self, coords, board, player, unit_type):
         self.coords = coords
         self.board = board
-        self.hp = hp
-        self.speed = speed
-        self.cost = cost
-        self.name = name
-        self.melee = melee
-        self.ranged = ranged
-        self.defence = 0.5
         self.player = player
-        if self.player:
-            self.player.add_unit(self)
-        self.sprite_name = sprite
+        self.player.add_unit(self)
+
+        self.name = unit_type['name']
+        self.cost = unit_type['cost']
+        self.sprite_name = unit_type['sprite']
+        self.hp = unit_type['hp']
+        self.speed = unit_type['speed']
+        self.defence = 0.5
+        melee = unit_type['attacks'][0].split('x')
+        self.melee = {'type': 'melee', 'attacks': int(melee[0]), 'damage': int(melee[1]), 'mod': 0}
+        if unit_type['attacks'][1] == '-':
+            self.ranged = None
+        else:
+            ranged = unit_type['attacks'][1].split('x')
+            self.ranged = {'type': 'ranged', 'attacks': int(ranged[0]),
+                           'damage': int(ranged[1]), 'mod': 0}
+
         self.load_sprite()
 
     def load_sprite(self):
