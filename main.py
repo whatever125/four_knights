@@ -2,7 +2,6 @@ import pygame
 import pygame.freetype
 import random
 import sys
-from queue import PriorityQueue
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -118,6 +117,7 @@ class Application:
                             self.attack(event.pos)
                             self.hide_information()
                         else:
+                            self.hide_information()
                             board.get_click(event.pos)
                     if event.button == 3:
                         if board.is_players_castle(event.pos):
@@ -154,6 +154,7 @@ class Application:
             camera.update()
             board.render()
             sprites.draw(screen)
+            self.show_cursor(pygame.mouse.get_pos())
             units.draw(screen)
             pygame.draw.rect(screen, (0, 0, 0),
                              self.button_end_turn)  # TODO изменить цвет, добавить надпись
@@ -189,8 +190,8 @@ class Application:
                 lines.append(line)
             for j in range(len(lines)):
                 title3_font.render_to(self.rent_unit_surface,
-                                         (200 * (i % 3) + 20, 300 * (i // 3) + 20 * j + 160),
-                                         lines[j], color_font)
+                                      (200 * (i % 3) + 20, 300 * (i // 3) + 20 * j + 160),
+                                      lines[j], color_font)
             unit_image = pygame.image.load(f'data/units/{all_units[i]["sprite"]}.png')
             unit_image = pygame.transform.scale(unit_image, (160, 160))
             unit_rect = unit_image.get_rect(topleft=(200 * (i % 3) + 20, 300 * (i // 3) + 10))
@@ -251,15 +252,15 @@ class Application:
         unit2_rect = unit2_image.get_rect(topleft=(250, 75))
         self.choose_attack_surface.blit(unit2_image, unit2_rect)
         title2_font.render_to(self.choose_attack_surface, (0, 200),
-                                 unit1.name.rjust(24, ' '), color_font)
+                              unit1.name.rjust(24, ' '), color_font)
         title2_font.render_to(self.choose_attack_surface, (200, 200),
-                                 unit2.name.rjust(24, ' '), color_font)
+                              unit2.name.rjust(24, ' '), color_font)
         title2_font.render_to(self.choose_attack_surface, (130, 275),
-                                 '--- ближняя ---', color_font)
+                              '--- ближняя ---', color_font)
         title2_font.render_to(self.choose_attack_surface, (50, 275),
-                                 f'{unit1.melee["attacks"]}x{unit1.melee["damage"]}', color_font)
+                              f'{unit1.melee["attacks"]}x{unit1.melee["damage"]}', color_font)
         title2_font.render_to(self.choose_attack_surface, (300, 275),
-                                 f'{unit2.melee["attacks"]}x{unit2.melee["damage"]}', color_font)
+                              f'{unit2.melee["attacks"]}x{unit2.melee["damage"]}', color_font)
         if not unit1.ranged:
             return
         if not unit2.ranged:
@@ -271,11 +272,11 @@ class Application:
                                   f'-', color_font)
             return
         title2_font.render_to(self.choose_attack_surface, (130, 340),
-                                 '--- дальняя ---', color_font)
+                              '--- дальняя ---', color_font)
         title2_font.render_to(self.choose_attack_surface, (50, 340),
-                                 f'{unit1.ranged["attacks"]}x{unit1.ranged["damage"]}', color_font)
+                              f'{unit1.ranged["attacks"]}x{unit1.ranged["damage"]}', color_font)
         title2_font.render_to(self.choose_attack_surface, (300, 340),
-                                 f'{unit2.ranged["attacks"]}x{unit2.ranged["damage"]}', color_font)
+                              f'{unit2.ranged["attacks"]}x{unit2.ranged["damage"]}', color_font)
 
     def attack(self, mouse_pos):
         x, y = mouse_pos
@@ -292,6 +293,18 @@ class Application:
         self.rent_unit_coords = None
         self.choose_attack_surface = None
         self.choose_attack_coords = None
+
+    @staticmethod
+    def show_cursor(mouse_pos):
+        cell = board.get_cell(mouse_pos)
+        try:
+            region = board.cell_region(*cell)
+            available = board.is_cell_available(*cell)
+        except Exception:
+            return
+        if region == 'water' or not available:
+            return
+        pygame.draw.polygon(screen, pygame.Color('gold'), board.get_cell_vertices(*cell), 1)
 
     @staticmethod
     def zoom_in():
@@ -467,6 +480,7 @@ class Board:
                     else:
                         self.selected_unit = None
                         self.make_cells_available()
+                    break
         elif self.distance(self.selected_unit.coords, clicked_cell) == 1:
             for unit in self.units:
                 if unit.coords == clicked_cell:
@@ -483,38 +497,20 @@ class Board:
                         available_cells = self.cells_available_from(
                             self.board[clicked_row][clicked_col], unit.mp)
                         self.make_cells_available(*available_cells)
+                    break
         if self.board[clicked_row][clicked_col].region == 'water':
             self.selected_unit = None
             self.make_cells_available()
-        elif not just_selected and self.selected_unit and self.board[clicked_row][clicked_col] \
-                in self.cells_available_from(self.board[self.selected_unit.coords[0]][
-                                                 self.selected_unit.coords[1]],
-                                             self.selected_unit.mp):
+        elif self.selected_unit and self.board[clicked_row][clicked_col] not in \
+                self.cells_available_from(
+                    self.board[self.selected_unit.coords[0]][self.selected_unit.coords[1]],
+                    self.selected_unit.mp):
+            self.selected_unit = None
+        elif not just_selected and self.selected_unit:
             self.make_cells_available()
             self.selected_unit.mp -= int(board.distance(self.selected_unit.coords, clicked_cell))
             self.selected_unit.move_to(*clicked_cell)
             self.selected_unit = None
-
-    def find_path(self, start, goal):
-        frontier = PriorityQueue()
-        frontier.put(PrioritizedItem(0, start))
-        came_from = dict()
-        cost_so_far = dict()
-        came_from[start] = None
-        cost_so_far[start] = 0
-        while not frontier.empty():
-            current = frontier.get().item
-            if current == goal:
-                return cost_so_far[current]
-            neighbors = filter(lambda x: self.board[x[0]][x[1]].region != 'water',
-                               [offset_neighbor(*current, i) for i in range(6)])
-            for next in neighbors:
-                new_cost = cost_so_far[current] + self.distance(current, next)
-                if next not in cost_so_far or new_cost < cost_so_far[next]:
-                    cost_so_far[next] = new_cost
-                    priority = new_cost + self.distance(next, goal)
-                    frontier.put(PrioritizedItem(priority, next))
-                    came_from[next] = current
 
     @staticmethod
     def distance(a, b):
@@ -582,6 +578,16 @@ class Board:
         for row in self.board:
             for cell in row:
                 cell.move_sprite(dx, dy)
+
+    def cell_region(self, row, col):
+        assert 0 <= row < self.width
+        assert 0 <= col < self.height
+        return self.board[row][col].region
+
+    def is_cell_available(self, row, col):
+        assert 0 <= row < self.width
+        assert 0 <= col < self.height
+        return self.board[row][col].available
 
     def update_units(self):
         for unit in self.units:
