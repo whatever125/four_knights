@@ -104,6 +104,7 @@ class Application:
         self.unit2 = None
 
     def start(self):
+        self.zoom_to_original_position()
         self.main()
 
     def main(self):
@@ -471,8 +472,8 @@ class Board:
         self.units = []
         for player in players:
             self.units.append(Unit(player.castles[0].coords, self, player, all_units[0]))
-        for i in self.units:
-            i.new_turn()
+        for unit in self.units:
+            unit.new_turn()
 
     def generate_board(self):
         board_generator = BoardGenerator(self)
@@ -1218,7 +1219,12 @@ ______                 _   __      _       _     _
     board_width, board_height = board_size
 
     screen_size = pygame.display.Info()
-    screen = pygame.display.set_mode((screen_size.current_h, screen_size.current_w), pygame.FULLSCREEN)
+
+    horizontal_indent = round((screen_size.current_w - board_width) / 2)
+    vertical_indent = round((screen_size.current_h - board_height) / 2)
+
+    screen = pygame.display.set_mode((screen_size.current_h, screen_size.current_w),
+                                     pygame.FULLSCREEN)
     screen.fill(color_water)
     fps = 60
     clock = pygame.time.Clock()
