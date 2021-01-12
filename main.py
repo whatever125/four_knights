@@ -9,42 +9,42 @@ color_water = (115, 170, 220)
 color_font = (255, 255, 255)
 
 all_units = [
-    {'name': 'Рыцарь',
+    {'name': 'Сержант',
      'sprite': 'default',
-     'hp': 20,
-     'cost': 15,
+     'hp': 32,
+     'cost': 19,
      'speed': 6,
-     'attacks': ('1x10', '-')},
-    {'name': 'Пехотинец',
+     'attacks': ('4x5', '4x4')},
+    {'name': 'Тяжелый пехотинец',
      'sprite': 'heavyinfantry',
-     'hp': 30,
-     'cost': 20,
+     'hp': 46,
+     'cost': 19,
      'speed': 4,
-     'attacks': (r'2x6', '-')},
+     'attacks': (r'2x11', '-')},
     {'name': 'Драгун',
      'sprite': 'dragoon',
-     'hp': 25,
-     'cost': 25,
-     'speed': 9,
-     'attacks': ('2x4', '1x12')},
+     'hp': 34,
+     'cost': 17,
+     'speed': 8,
+     'attacks': ('3x6', '-')},
     {'name': 'Лучник',
      'sprite': 'bowman',
-     'hp': 15,
-     'cost': 15,
-     'speed': 7,
-     'attacks': ('1x4', '2x8')},
+     'hp': 33,
+     'cost': 14,
+     'speed': 5,
+     'attacks': ('2x4', '3x6')},
     {'name': 'Всадник',
      'sprite': 'horseman',
-     'hp': 25,
-     'cost': 25,
-     'speed': 9,
-     'attacks': ('2x8', '-')},
+     'hp': 38,
+     'cost': 23,
+     'speed': 8,
+     'attacks': ('2x9', '-')},
     {'name': 'Копейщик',
      'sprite': 'pikeman',
-     'hp': 25,
-     'cost': 15,
-     'speed': 7,
-     'attacks': ('1x18', '1x5')}
+     'hp': 36,
+     'cost': 14,
+     'speed': 5,
+     'attacks': ('3x7', '1x6')}
 ]
 
 colors = ['red', 'blue', 'green', 'yellow', 'pink']
@@ -207,7 +207,7 @@ class Application:
 
         name = players[turn].name
         money = players[turn].money
-        income = players[turn].income + len(players[turn].villages) - len(players[turn].units)
+        income = players[turn].income + len(players[turn].villages) * 2 - len(players[turn].units)
         villages = len(players[turn].villages)
         castles = len(players[turn].castles)
         units = len(players[turn].units)
@@ -442,7 +442,7 @@ class Application:
         else:
             turn += 1
         players[turn].money += (
-                players[turn].income + len(players[turn].villages) - len(players[turn].units))
+                players[turn].income + len(players[turn].villages) * 2 - len(players[turn].units))
         for i in players[turn].units:
             i.new_turn()
 
@@ -542,13 +542,17 @@ class Board:
             self.on_click(cell)
 
     def on_click(self, clicked_cell):
+        neighbors = [offset_neighbor(*clicked_cell, i) for i in range(6)]
         clicked_row, clicked_col = clicked_cell
         player = players[turn]
         just_selected = False
-        if self.selected_unit and self.distance(self.selected_unit.coords, clicked_cell) == 0:
+        clicked_board_cell = self.get_board_cell(*clicked_cell)
+        if self.selected_unit:
+            unit_board_cell = self.get_board_cell(*self.selected_unit.coords)
+        if self.selected_unit and self.cube_distance(unit_board_cell, clicked_board_cell) == 0:
             self.selected_unit = None
             self.make_cells_available()
-        elif not self.selected_unit or self.distance(self.selected_unit.coords, clicked_cell) > 1:
+        elif not self.selected_unit or self.cube_distance(unit_board_cell, clicked_board_cell) > 1:
             self.make_cells_available()
             for unit in self.units:
                 if unit.coords == clicked_cell:
@@ -563,7 +567,7 @@ class Board:
                         self.selected_unit = None
                         self.make_cells_available()
                     break
-        elif self.distance(self.selected_unit.coords, clicked_cell) == 1:
+        elif self.cube_distance(unit_board_cell, clicked_board_cell) == 1:
             for unit in self.units:
                 if unit.coords == clicked_cell:
                     if unit not in player.units:
@@ -590,15 +594,16 @@ class Board:
             self.selected_unit = None
         elif not just_selected and self.selected_unit:
             self.make_cells_available()
-            self.selected_unit.mp -= int(board.distance(self.selected_unit.coords, clicked_cell))
+            self.selected_unit.mp -= int(self.cube_distance(unit_board_cell, clicked_board_cell))
             self.selected_unit.move_to(*clicked_cell)
             self.selected_unit = None
 
     @staticmethod
-    def distance(a, b):
-        return (abs(a[0] - b[0])
-                + abs(a[0] + a[1] - b[0] - b[1])
-                + abs(a[1] - b[1])) / 2
+    def cube_distance(a, b):
+        return max(abs(a.x - b.x), abs(a.y - b.y), abs(a.z - b.z))
+
+    def get_board_cell(self, row, col):
+        return self.board[row][col]
 
     def cells_available_from(self, start, movement):
         visited = set()
@@ -869,7 +874,7 @@ class Player:
         self.castles = []
         self.money = 100
         self.name = name
-        self.income = 5
+        self.income = 15
 
     def delete_unit(self, unit):
         self.units = list(filter(lambda x: x != unit, self.units))
