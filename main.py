@@ -91,6 +91,10 @@ class Application:
         self.unit_info_coords = None
         self.choose_attack_surface = None
         self.choose_attack_coords = None
+        self.attack_info_surface_1 = None
+        self.attack_info_coords_1 = None
+        self.attack_info_surface_2 = None
+        self.attack_info_coords_2 = None
         self.info_surface = None
         self.info_coords = None
         self.winner_surf = None
@@ -163,13 +167,7 @@ class Application:
             self.show_cursor(pygame.mouse.get_pos())
             units.draw(screen)
             self.show_info()
-            screen.blit(self.info_surface, self.info_coords)
-            if self.rent_unit_surface:
-                screen.blit(self.rent_unit_surface, self.rent_unit_coords)
-            if self.unit_info_surface:
-                screen.blit(self.unit_info_surface, self.unit_info_coords)
-            if self.choose_attack_surface:
-                screen.blit(self.choose_attack_surface, self.choose_attack_coords)
+            self.blit_surfaces()
             pygame.display.flip()
             clock.tick(fps)
         self.show_winner()
@@ -182,6 +180,15 @@ class Application:
             pygame.display.flip()
             clock.tick(fps)
 
+    def blit_surfaces(self):
+        screen.blit(self.info_surface, self.info_coords)
+        if self.rent_unit_surface:
+            screen.blit(self.rent_unit_surface, self.rent_unit_coords)
+        if self.unit_info_surface:
+            screen.blit(self.unit_info_surface, self.unit_info_coords)
+        if self.choose_attack_surface:
+            screen.blit(self.choose_attack_surface, self.choose_attack_coords)
+
     def show_info(self):
         display_width, display_height = pygame.display.get_surface().get_size()
         surf_width, surf_height = display_width * 0.15 + 1, display_height
@@ -191,7 +198,7 @@ class Application:
         self.info_coords = display_width * 0.85, 0
 
         self.button_end_turn = pygame.Rect(0.1 * surf_width + self.info_coords[0],
-                                           0.9 * surf_height,
+                                           0.85 * surf_height,
                                            0.9 * surf_width,
                                            0.1 * surf_height)
         title1_font.render_to(self.info_surface, (int(0.1 * surf_width), int(0.9 * surf_height)),
@@ -215,6 +222,13 @@ class Application:
                               f'Замков: {castles}', color_font)
         title1_font.render_to(self.info_surface, (25, 300),
                               f'Юнитов: {units}', color_font)
+        if self.unit1:
+            title0_font.render_to(self.info_surface, (25, 400),
+                                  f'{self.unit1.name}: {self.unit1.delta_hp}',
+                                  pygame.Color(self.unit1.player.color))
+            title0_font.render_to(self.info_surface, (25, 450),
+                                  f'{self.unit2.name}: {self.unit2.delta_hp}',
+                                  pygame.Color(self.unit2.player.color))
 
     def show_rent_unit(self):
         self.rent_unit_surface = pygame.Surface((600, 600))
@@ -355,6 +369,10 @@ class Application:
         self.rent_unit_coords = None
         self.choose_attack_surface = None
         self.choose_attack_coords = None
+        self.attack_info_surface_1 = None
+        self.attack_info_coords_1 = None
+        self.attack_info_surface_2 = None
+        self.attack_info_coords_2 = None
 
     @staticmethod
     def show_cursor(mouse_pos):
@@ -620,6 +638,7 @@ class Board:
                 cell.update()
 
     def make_cells_available(self, *cells):
+        global color_water
         if cells:
             for cell in cells:
                 cell.available = True
@@ -627,8 +646,10 @@ class Board:
             for row in self.board:
                 for cell in row:
                     cell.available = True
+            color_water = (115, 170, 220)
 
     def make_cells_unavailable(self, *cells):
+        global color_water
         if cells:
             for cell in cells:
                 cell.available = False
@@ -636,6 +657,7 @@ class Board:
             for row in self.board:
                 for cell in row:
                     cell.available = False
+            color_water = (65, 120, 170)
 
     def move_cells(self, dx, dy):
         for row in self.board:
@@ -926,6 +948,7 @@ class Unit:
         self.sprite_name = unit_type['sprite']
         self.max_hp = unit_type['hp']
         self.hp = self.max_hp
+        self.delta_hp = 0
         self.speed = unit_type['speed']
         self.mp = 0
         self.turn_attack = True
@@ -985,7 +1008,6 @@ class Unit:
         for i in range(attack['attacks']):
             if random.random() + attack['mod'] > enemy.defence:
                 enemy.take_damage(attack['damage'])
-                print(self.hp, enemy.hp)
                 if enemy.hp <= 0:
                     enemy.die()
                     return
@@ -993,7 +1015,6 @@ class Unit:
             for i in range(enemy.melee['attacks']):
                 if random.random() + enemy.melee['mod'] > self.defence:
                     self.take_damage(enemy.melee['damage'])
-                    print(self.hp, enemy.hp)
                     if self.hp <= 0:
                         self.die()
                         return
@@ -1016,6 +1037,7 @@ class Unit:
                         return
 
     def take_damage(self, damage):
+        self.delta_hp = -damage
         self.hp -= damage
 
     def return_information(self):
@@ -1144,6 +1166,16 @@ class Camera:
 
 
 if __name__ == '__main__':
+    print(r"""
+______                 _   __      _       _     _       
+|  ___|               | | / /     (_)     | |   | |      
+| |_ ___  _   _ _ __  | |/ / _ __  _  __ _| |__ | |_ ___ 
+|  _/ _ \| | | | '__| |    \| '_ \| |/ _` | '_ \| __/ __|
+| || (_) | |_| | |    | |\  \ | | | | (_| | | | | |_\__ \
+\_| \___/ \__,_|_|    \_| \_/_| |_|_|\__, |_| |_|\__|___/
+                                      __/ |              
+                                     |___/               
+""")
     players = []
     turn = 0
     try:
@@ -1158,19 +1190,30 @@ if __name__ == '__main__':
             players.append(Player(colors[i], name=f'Игрок {i + 1}'))
         else:
             players.append(Player(colors[i], name=name))
+    try:
+        board_size = int(input('Выберите размер карты (1-3): '))
+        assert 1 <= board_size <= 3
+    except Exception:
+        print('Введены неверные данный')
+        sys.exit()
+
+    width = height = (board_size + 2) * 10
 
     pygame.init()
 
     sprites = pygame.sprite.Group()
     units = pygame.sprite.Group()
 
-    width = 30
-    height = 30
     size = original_size = 15
     delta = original_delta = 5
     vertical_indent = horizontal_indent = 50
 
-    board = Board(width, height, size)
+    board = None
+    while not board:
+        try:
+            board = Board(width, height, size)
+        except Exception:
+            continue
     board_size = round(width * size * 3 ** 0.5), round(height * size * 1.5)
     board_width, board_height = board_size
 
