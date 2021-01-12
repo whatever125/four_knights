@@ -1217,10 +1217,8 @@ ______                 _   __      _       _     _
     board_size = round(width * size * 3 ** 0.5), round(height * size * 1.5)
     board_width, board_height = board_size
 
-    screen_size = round(width * size * 3 ** 0.5 + horizontal_indent * 2), \
-                  round(height * size * 1.5 + vertical_indent * 2)
-    screen_width, screen_height = screen_size
-    screen = pygame.display.set_mode(screen_size, pygame.FULLSCREEN)
+    screen_size = pygame.display.Info()
+    screen = pygame.display.set_mode((screen_size.current_h, screen_size.current_w), pygame.FULLSCREEN)
     screen.fill(color_water)
     fps = 60
     clock = pygame.time.Clock()
