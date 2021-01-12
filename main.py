@@ -15,7 +15,7 @@ all_units = [
      'cost': 19,
      'speed': 6,
      'attacks': ('4x5', '4x4')},
-    {'name': 'Тяжелый пехотинец',
+    {'name': 'Пехотинец',
      'sprite': 'heavyinfantry',
      'hp': 46,
      'cost': 19,
@@ -434,7 +434,7 @@ class Application:
         board.make_cells_available()
         for player in players:
             if not player.units and not player.castles:
-                del players[turn]
+                del players[players.index(player)]
                 if turn > 0:
                     turn -= 1
         if turn == len(players) - 1:
