@@ -58,18 +58,21 @@ offset_directions = [
 
 
 def offset_neighbor(row, col, direction):
+    """Возвращает ряд и столбец соседа в определенном направлении"""
     parity = row % 2
     dir = offset_directions[parity][direction]
     return row + dir[1], col + dir[0]
 
 
 def cube_to_offset(x, y, z):
+    """Преобразует кубические координаты в ряд и столбец"""
     col = x + (z - (z % 2)) / 2
     row = z
     return col, row
 
 
 def offset_to_cube(row, col):
+    """Преобразует ряд и столбец в кубические координаты"""
     x = col - (row - (row % 2)) / 2
     z = row
     y = -x - z
@@ -77,13 +80,17 @@ def offset_to_cube(row, col):
 
 
 def offset_to_pixel(row, col):
+    """Преобразует ряд и столбец в координаты на экране"""
     x = size * 3 ** 0.5 * (col + 0.5 * (row % 2))
     y = size * 3 / 2 * row
     return round(x) + horizontal_indent, round(y) + vertical_indent
 
 
 class Application:
+    """Приложение"""
+
     def __init__(self):
+        """Инициализирует класс"""
         self.button_end_turn = None
         self.rent_unit_surface = None
         self.rent_unit_coords = None
@@ -104,10 +111,12 @@ class Application:
         self.unit2 = None
 
     def start(self):
+        """Запускает приложение"""
         self.zoom_to_original_position()
         self.main()
 
     def main(self):
+        """Воспроизводит основной цикл приложения"""
         while len(players) > 1:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -182,6 +191,7 @@ class Application:
             clock.tick(fps)
 
     def blit_surfaces(self):
+        """Отрисовывает вспомогательные окна"""
         screen.blit(self.info_surface, self.info_coords)
         if self.rent_unit_surface:
             screen.blit(self.rent_unit_surface, self.rent_unit_coords)
@@ -191,6 +201,7 @@ class Application:
             screen.blit(self.choose_attack_surface, self.choose_attack_coords)
 
     def show_info(self):
+        """Готовит данные для окна с основной информацией"""
         display_width, display_height = pygame.display.get_surface().get_size()
         surf_width, surf_height = display_width * 0.15 + 1, display_height
         self.info_surface = pygame.Surface((surf_width, surf_height))
@@ -232,6 +243,7 @@ class Application:
                                   pygame.Color(self.unit2.player.color))
 
     def show_rent_unit(self):
+        """Готовит данные для окна с покупкой юнитов"""
         self.rent_unit_surface = pygame.Surface((600, 600))
         self.rent_unit_surface.fill((0, 0, 0))
         self.rent_unit_surface.set_alpha(210)
@@ -262,6 +274,7 @@ class Application:
             self.rent_unit_surface.blit(unit_image, unit_rect)
 
     def rent_unit(self, mouse_pos):
+        """Производит покупку юнита"""
         x, y = mouse_pos
         x -= self.rent_unit_coords[0]
         y -= self.rent_unit_coords[1]
@@ -285,6 +298,7 @@ class Application:
                 break
 
     def show_unit_info(self, mouse_pos):
+        """Готовит данные для окна с информацией о юните"""
         self.unit_info_surface = pygame.Surface((200, 140))
         self.unit_info_surface.fill((0, 0, 0))
         self.unit_info_surface.set_alpha(210)
@@ -300,6 +314,7 @@ class Application:
             title3_font.render_to(self.unit_info_surface, (10, 20 * i + 10), lines[i], color_font)
 
     def show_choose_attack(self, unit1, unit2):
+        """Готовит данные для окна с информацией об атаке"""
         self.unit1 = unit1
         self.unit2 = unit2
         self.choose_attack_surface = pygame.Surface((400, 400))
@@ -347,6 +362,7 @@ class Application:
                               f'{unit2.ranged["attacks"]}x{unit2.ranged["damage"]}', color_font)
 
     def attack(self, mouse_pos):
+        """Производит атаку"""
         x, y = mouse_pos
         y -= self.choose_attack_coords[1]
         if 250 <= y < 310:
@@ -355,6 +371,7 @@ class Application:
             self.unit1.ranged_attack(self.unit1.ranged, self.unit2)
 
     def show_winner(self):
+        """Готовит данные для окна с информацией о победителе"""
         self.winner_surf = pygame.Surface((400, 100))
         self.winner_surf.fill((0, 0, 0))
         self.winner_surf.set_alpha(210)
@@ -364,6 +381,7 @@ class Application:
                               f'Победил игрок {players[0].name}!', color_font)
 
     def hide_information(self):
+        """Стирает данные обо всех окнах"""
         self.unit_info_surface = None
         self.unit_info_coords = None
         self.rent_unit_surface = None
@@ -377,6 +395,7 @@ class Application:
 
     @staticmethod
     def show_cursor(mouse_pos):
+        """Рисует обводку на шестиугольнике"""
         cell = board.get_cell(mouse_pos)
         try:
             region = board.cell_region(*cell)
@@ -389,6 +408,7 @@ class Application:
 
     @staticmethod
     def zoom_in():
+        """Приближает карту"""
         global size, delta, board_width, board_height
         if round(size * 1.1) <= 50:
             size = round(size * 1.1)
@@ -403,6 +423,7 @@ class Application:
 
     @staticmethod
     def zoom_out():
+        """Отдаляет карту"""
         global size, delta, board_width, board_height
         if round(size / 1.1) >= 10:
             size = round(size / 1.1)
@@ -417,6 +438,7 @@ class Application:
 
     @staticmethod
     def zoom_to_original_position():
+        """Возвращает карту в исходное положение"""
         global size, delta, board_width, board_height
         camera.dx = 0
         camera.dy = 0
@@ -430,6 +452,7 @@ class Application:
 
     @staticmethod
     def end_turn():
+        """Производит операции в конце хода, заканчивает ход"""
         global turn
         board.make_cells_available()
         for player in players:
@@ -448,6 +471,7 @@ class Application:
 
     @staticmethod
     def resize():
+        """Изменяет вид приложения при изменении размера окна"""
         global horizontal_indent, vertical_indent
         new_screen_size = pygame.display.get_surface().get_size()
         new_screen_width, new_screen_height = new_screen_size[0] * 0.9, new_screen_size[1]
@@ -457,12 +481,16 @@ class Application:
 
     @staticmethod
     def terminate():
+        """Заканчивает работу приложения"""
         pygame.quit()
         sys.exit()
 
 
 class Board:
+    """Игровая доска"""
+
     def __init__(self, width, height, cell_size):
+        """Инициализирует доску"""
         self.width = width
         self.height = height
         self.cell_size = cell_size
@@ -476,10 +504,12 @@ class Board:
             unit.new_turn()
 
     def generate_board(self):
+        """Генерирует карту"""
         board_generator = BoardGenerator(self)
         board_generator.generate()
 
     def get_cell_vertices(self, row, col):
+        """Возвращает координаты вершин клетки"""
         x = self.cell_size * 3 ** 0.5 * (col + 0.5 * (row % 2))
         y = self.cell_size * 1.5 * row
         return (round(x + 3 ** 0.5 * self.cell_size / 2) + horizontal_indent + camera.dx,
@@ -496,11 +526,13 @@ class Board:
                 round(y + 0.5 * self.cell_size) + vertical_indent + camera.dy)
 
     def render(self):
+        """Обновляет все клетки на карте"""
         for row in self.board:
             for cell in row:
                 cell.update()
 
     def get_cell(self, mouse_pos):
+        """Возвращает ряд и столбец нажатой клетки по координатам курсора"""
         x, y = mouse_pos
         x -= horizontal_indent
         x -= camera.dx
@@ -536,12 +568,14 @@ class Board:
         return round(row), round(column)
 
     def get_click(self, mouse_pos):
+        """Запускает процесс обработки нажатия"""
         cell = self.get_cell(mouse_pos)
         x, y = cell
         if 0 <= x < self.height and 0 <= y < self.width:
             self.on_click(cell)
 
     def on_click(self, clicked_cell):
+        """Обрабатывает нажатие"""
         neighbors = [offset_neighbor(*clicked_cell, i) for i in range(6)]
         clicked_row, clicked_col = clicked_cell
         player = players[turn]
@@ -600,12 +634,15 @@ class Board:
 
     @staticmethod
     def cube_distance(a, b):
+        """Возвращает минимальное расстояние иежду двумя клетками"""
         return max(abs(a.x - b.x), abs(a.y - b.y), abs(a.z - b.z))
 
     def get_board_cell(self, row, col):
+        """Возвращает объект клетки по ряду и столбцу"""
         return self.board[row][col]
 
     def cells_available_from(self, start, movement):
+        """Возвращает список клеток, доступных за n шагов из данной клетки"""
         visited = set()
         visited.add(start)
         fringes = [[start]]
@@ -628,22 +665,27 @@ class Board:
         return visited
 
     def is_players_castle(self, mouse_pos):
+        """Проверяет, является ли клетка замком игрока"""
         row, col = self.get_cell(mouse_pos)
         return self.board[row][col].region == 'castle' and \
                self.board[row][col].player == players[turn]
 
     def update_cell_size(self):
+        """Обновляет размер клеток"""
         self.cell_size = size
 
     def update_cell_region(self, x, y, region):
+        """Обновляет тип клетки"""
         self.board[x][y].region = region
 
     def update_cells(self):
+        """Обновляет все клетки на поле"""
         for row in self.board:
             for cell in row:
                 cell.update()
 
     def make_cells_available(self, *cells):
+        """Делает набор клеток доступным для хода"""
         global color_water
         if cells:
             for cell in cells:
@@ -655,6 +697,7 @@ class Board:
             color_water = (115, 170, 220)
 
     def make_cells_unavailable(self, *cells):
+        """Делает набор клеток недоступным для хода"""
         global color_water
         if cells:
             for cell in cells:
@@ -666,32 +709,39 @@ class Board:
             color_water = (65, 120, 170)
 
     def move_cells(self, dx, dy):
+        """Передвигает клетки на экране"""
         for row in self.board:
             for cell in row:
                 cell.move_sprite(dx, dy)
 
     def cell_region(self, row, col):
+        """Возвращает тип клетки"""
         assert 0 <= row < self.width
         assert 0 <= col < self.height
         return self.board[row][col].region
 
     def is_cell_available(self, row, col):
+        """Проверяет, доступна ли клектка для хода"""
         assert 0 <= row < self.width
         assert 0 <= col < self.height
         return self.board[row][col].available
 
     def update_units(self):
+        """Обновляет всех юнитов"""
         for unit in self.units:
             unit.update()
 
     def move_units(self, dx, dy):
+        """Перемещает всех юнитов на экране"""
         for unit in self.units:
             unit.move_sprite(dx, dy)
 
     def delete_unit(self, unit):
+        """Удаляет юнита"""
         self.units = list(filter(lambda x: x != unit, self.units))
 
     def is_unit(self, mouse_pos):
+        """Проверяет, стоит ли на клетке юнит"""
         cell = self.get_cell(mouse_pos)
         for unit in self.units:
             if unit.coords == cell:
@@ -699,6 +749,7 @@ class Board:
         return False
 
     def unit_info(self, mouse_pos):
+        """Возвращает информацию о юните по нажатию"""
         cell = self.get_cell(mouse_pos)
         info = {}
         for unit in self.units:
@@ -716,7 +767,10 @@ class Board:
 
 
 class BoardGenerator:
+    """Генератор поля"""
+
     def __init__(self, board):
+        """Инициализирует генератор"""
         self.width = board.width
         self.height = board.height
         self.board = board
@@ -730,6 +784,7 @@ class BoardGenerator:
         self.generator = {(i, j): 'water' for i in range(self.height) for j in range(self.width)}
 
     def generate(self):
+        """Запускает генерацию"""
         self.generate_board()
         self.generate_forest()
         self.generate_desert()
@@ -740,6 +795,7 @@ class BoardGenerator:
         self.update_cells()
 
     def generate_board(self):
+        """Генерирует воду"""
         mid_row = self.height // 2 - 1
         mid_col = self.width // 2 - 1
         mid_cell = mid_row, mid_col
@@ -754,6 +810,7 @@ class BoardGenerator:
         self.delete_pre_cells()
 
     def generate_forest(self):
+        """Генерирует леса"""
         available_cells = list(filter(lambda cell: self.generator[cell] == 'plain', self.generator))
         first_cell = random.choice(available_cells)
         self.generator[first_cell] = 'forest'
@@ -771,6 +828,7 @@ class BoardGenerator:
         self.delete_pre_cells()
 
     def generate_desert(self):
+        """Генерирует пустыни"""
         available_cells = list(filter(lambda cell: self.generator[cell] == 'plain', self.generator))
         first_cell = random.choice(available_cells)
         self.generator[first_cell] = 'desert'
@@ -788,6 +846,7 @@ class BoardGenerator:
         self.delete_pre_cells()
 
     def generate_mountain(self):
+        """Генерирует горы"""
         available_cells = list(filter(lambda cell: self.generator[cell] == 'plain', self.generator))
         first_cell = random.choice(available_cells)
         self.generator[first_cell] = 'mountains'
@@ -805,6 +864,7 @@ class BoardGenerator:
         self.delete_pre_cells()
 
     def generate_swamp(self):
+        """Генерирует болота"""
         available_cells = list(filter(lambda cell: self.generator[cell] == 'plain', self.generator))
         first_cell = random.choice(available_cells)
         self.generator[first_cell] = 'swamp'
@@ -822,6 +882,7 @@ class BoardGenerator:
         self.delete_pre_cells()
 
     def generate_villages(self):
+        """Генерирует деревни"""
         for _ in range(self.number_of_villages):
             available_cells = list(
                 filter(lambda cell: self.generator[cell] != 'water', self.generator))
@@ -829,6 +890,7 @@ class BoardGenerator:
             self.generator[village_cell] = 'village'
 
     def generate_castles(self):
+        """Генерирует замки"""
         for player in players:
             available_cells = list(
                 filter(lambda cell: self.generator[cell] != 'water', self.generator))
@@ -839,11 +901,13 @@ class BoardGenerator:
             player.castles.append(self.board.board[castle_cell[0]][castle_cell[1]])
 
     def delete_pre_cells(self):
+        """Удаляет лишние данные"""
         for cell in self.generator:
             if self.generator[cell].startswith('pre'):
                 self.generator[cell] = 'plain'
 
     def update_neighbours(self, cell, chance, from_region, to_region):
+        """Обновляет соседей клетки"""
         for direction in range(6):
             try:
                 x, y = offset_neighbor(*cell, direction)
@@ -853,6 +917,7 @@ class BoardGenerator:
                 pass
 
     def update_cells(self):
+        """Обновляет все клетки"""
         for cell in self.generator:
             try:
                 assert 0 <= cell[0] < self.height
@@ -867,7 +932,10 @@ class BoardGenerator:
 
 
 class Player:
+    """Игрок"""
+
     def __init__(self, color, name):
+        """Инициализирует игрока"""
         self.color = color
         self.units = []
         self.villages = []
@@ -877,20 +945,27 @@ class Player:
         self.income = 15
 
     def delete_unit(self, unit):
+        """Удаляет юнита"""
         self.units = list(filter(lambda x: x != unit, self.units))
 
     def add_unit(self, unit):
+        """Добавляет юнита"""
         self.units.append(unit)
 
     def delete_village(self, village):
+        """Удаляет деревню"""
         self.villages = list(filter(lambda x: x != village, self.villages))
 
     def delete_castle(self, castle):
+        """Удаляет замок"""
         self.castles = list(filter(lambda x: x != castle, self.castles))
 
 
 class Cell:
+    """Клетка"""
+
     def __init__(self, row, col, region='plain', player=None):
+        """Инициализирует клетку"""
         self.region = region
         self.col = col
         self.row = row
@@ -904,6 +979,7 @@ class Cell:
         self.player_color = None
 
     def load_sprite(self):
+        """Загружает спрайт клетки"""
         self.sprite = pygame.sprite.Sprite()
         if self.player:
             self.image_available = pygame.image.load(
@@ -924,6 +1000,7 @@ class Cell:
         sprites.add(self.sprite)
 
     def update(self):
+        """Обновляет информацию о клетке"""
         sprites.remove(self.sprite)
         if self.available:
             self.sprite.image = pygame.transform.scale(
@@ -938,12 +1015,16 @@ class Cell:
         sprites.add(self.sprite)
 
     def move_sprite(self, dx, dy):
+        """Передвигает клетку по экрану"""
         self.sprite.rect.x += dx
         self.sprite.rect.y += dy
 
 
 class Unit:
+    """Юнит"""
+
     def __init__(self, coords, board, player, unit_type):
+        """Инициализирует юнита"""
         self.coords = coords
         self.board = board
         self.player = player
@@ -971,6 +1052,7 @@ class Unit:
         self.load_sprite()
 
     def load_sprite(self):
+        """Загружает спрайт юнита"""
         self.sprite = pygame.sprite.Sprite()
         self.image = pygame.image.load(f'data/units/{self.sprite_name}_{self.player.color}.png')
         self.sprite.image = pygame.transform.scale(
@@ -982,6 +1064,7 @@ class Unit:
         units.add(self.sprite)
 
     def move_to(self, x, y):
+        """Передвигает юнита по полю"""
         self.coords = (x, y)
         pixel = offset_to_pixel(*self.coords)
         self.sprite.rect.x = pixel[0] + camera.dx
@@ -1003,12 +1086,14 @@ class Unit:
             board.board[x][y].load_sprite()
 
     def die(self):
+        """Обрабатывает смерть юнита"""
         board.delete_unit(self)
         units.remove(self.sprite)
         if self.player:
             self.player.delete_unit(self)
 
     def melee_attack(self, attack, enemy):
+        """Обрабатывает ближний бой"""
         self.turn_attack = False
         self.mp = 0
         for i in range(attack['attacks']):
@@ -1026,6 +1111,7 @@ class Unit:
                         return
 
     def ranged_attack(self, attack, enemy):
+        """Обрабатывает дальний бой"""
         self.turn_attack = False
         self.mp = 0
         for i in range(attack['attacks']):
@@ -1043,10 +1129,12 @@ class Unit:
                         return
 
     def take_damage(self, damage):
+        """Принимает урон"""
         self.delta_hp = -damage
         self.hp -= damage
 
     def return_information(self):
+        """Возвращает информацию о юните"""
         if not self.melee:
             melee = '-'
         else:
@@ -1063,6 +1151,7 @@ class Unit:
                 'attacks': (melee, ranged)}
 
     def new_turn(self):
+        """Обновляет данные о юните на новом ходу"""
         if self.board.board[self.coords[0]][self.coords[1]].region == 'village':
             self.hp += 8
         else:
@@ -1073,6 +1162,7 @@ class Unit:
         self.turn_attack = True
 
     def update(self):
+        """Обновляет юнита"""
         units.remove(self.sprite)
         self.sprite.image = pygame.transform.scale(
             self.image, (round(size * 3 ** 0.5), round(size * 2)))
@@ -1083,27 +1173,34 @@ class Unit:
         units.add(self.sprite)
 
     def move_sprite(self, dx, dy):
+        """Двигает спрайт юнита по экрану"""
         self.sprite.rect.x += dx
         self.sprite.rect.y += dy
 
 
 @dataclass(order=True)
 class PrioritizedItem:
+    """Вспомогательный класс"""
     priority: int
     item: Any = field(compare=False)
 
 
 class Camera:
+    """Камера"""
+
     def __init__(self):
+        """Инициализирует камеру"""
         self.dx = 0
         self.dy = 0
         self.mouse_is_in_the_app = False
 
     def apply(self, obj):
+        """Перемещает данный объект"""
         obj.rect.x += self.dx
         obj.rect.y += self.dy
 
     def update(self):
+        """Двигает камеру и скрывает вспомогательные окна в приложении"""
         if self.mouse_is_on_the_left() and self.mouse_is_in_the_app:
             self.move_camera_to_the_right()
             app.hide_information()
@@ -1122,52 +1219,68 @@ class Camera:
 
     @staticmethod
     def mouse_is_on_the_left():
+        """Проверяет, находится ли курсор в области движения влево"""
         x, y = pygame.mouse.get_pos()
         surface_size = pygame.display.get_surface().get_size()
         return x <= surface_size[0] * 0.05
 
     @staticmethod
     def mouse_is_on_the_right():
+        """Проверяет, находится ли курсор в области движения вправо"""
         x, y = pygame.mouse.get_pos()
         surface_size = pygame.display.get_surface().get_size()
         return x >= surface_size[0] * 0.95
 
     @staticmethod
     def mouse_is_at_the_bottom():
+        """Проверяет, находится ли курсор в области движения вниз"""
         x, y = pygame.mouse.get_pos()
         surface_size = pygame.display.get_surface().get_size()
         return y <= surface_size[1] * 0.05
 
     @staticmethod
     def mouse_is_at_the_top():
+        """Проверяет, находится ли курсор в области движения вверх"""
         x, y = pygame.mouse.get_pos()
         surface_size = pygame.display.get_surface().get_size()
         return y >= surface_size[1] * 0.95
 
     def move_camera_to_the_right(self):
+        """Двигает камеру вправо"""
         self.dx += delta
         board.move_units(delta, 0)
         board.move_cells(delta, 0)
 
     def move_camera_to_the_left(self):
+        """Двигает камеру влево"""
         self.dx -= delta
         board.move_units(-delta, 0)
         board.move_cells(-delta, 0)
 
     def move_camera_to_the_top(self):
+        """Двигает камеру вверх"""
         self.dy += delta
         board.move_units(0, delta)
         board.move_cells(0, delta)
 
     def move_camera_to_the_bottom(self):
+        """Двигает камеру вниз"""
         self.dy -= delta
         board.move_units(0, -delta)
         board.move_cells(0, -delta)
 
     def mouse_enter(self):
+        """
+        Обновляют информацию о положении курсора при переключении
+        внимания на окно приложения
+        """
         self.mouse_is_in_the_app = True
 
     def mouse_leave(self):
+        """
+        Обновляют информацию о положении курсора при переключении
+        внимания от окна приложения
+        """
         self.mouse_is_in_the_app = False
 
 
